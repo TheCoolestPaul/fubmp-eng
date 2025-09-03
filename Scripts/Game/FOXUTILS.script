@@ -1,0 +1,1042 @@
+object FOXUnstuck: CommandScript
+{
+	FOXUnstuck(){SetIcon("aim");}
+	bool CheckPossible(GameObject *Caller){return true;}
+	bool CheckTarget(GameObject *Caller, Actor *Target, int childID){return true;}
+	void PushActions(GameObject *Caller, Actor *Target, int childID)
+	{
+		//if (!Caller->GetType()== ACTOR_VEHICLE) return;
+		GameObject v (Caller);
+		if (!v.IsValid()) return;
+		if (v.IsHidden()) v.Show();
+		Vector Pos = v.GetPosition();
+		Game::FindFreePosition(Caller, Pos, 2000.0f);
+		v.SetPosition(Pos);
+	}
+};
+object FOX_Bin_Taucher: CommandScript
+{
+	FOX_Bin_Taucher(){SetGroupID(20);}
+	bool CheckTarget(GameObject *Caller, Actor *Target, int childID){return true;}
+	void PushActions(GameObject *Caller, Actor *Target, int childID){}
+};
+object FOX_Hyd_OF: CommandScript
+{
+	FOX_Hyd_OF(){SetGroupID(20);}
+	bool CheckTarget(GameObject *Caller, Actor *Target, int childID){return true;}
+	void PushActions(GameObject *Caller, Actor *Target, int childID){}
+};
+
+object FOXGoUH: CommandScript
+{
+	FOXGoUH(){SetRestrictions(RESTRICT_SELFEXECUTE); SetPriority(0); SetCursor("aim");}
+	bool CheckPossible(GameObject *Caller){
+		return Caller->HasCommand("ALARM_DUMMY");
+		Vehicle v(Caller);
+		if (!v.IsValid()) return false;
+		return v.GetNumPassengers() > 0;
+	}
+	bool CheckTarget(GameObject *Caller, Actor *Target, int childID){
+		GameObject g(Target);
+		if (g.IsValid() && g.HasCommand("FOXGoUH") && g.GetType() != ACTOR_VEHICLE) return true;
+		return  Caller->GetID() == Target->GetID();
+	}
+	void PushActions(GameObject *Caller, Actor *Target, int childID)
+	{
+		Vehicle v(Caller);
+		if (childID == -1)
+		{
+			int time = 500;
+			time = time + Math::rand()%time;
+			GameObject g(Target);
+			if (g.IsValid() && !g.IsHidden() && v.Distance(&g) < 500)
+			{
+				v.Hide();
+				//v.PushActionWait(ACTION_APPEND, time);
+				if (v.HasName("10_10_01") || v.HasName("01_11_01") || v.HasName("03_14_01")) g.SetChildEnabled("ELW", false);
+				else if (v.HasName("10_46_01") || v.HasName("01_42_01") || v.HasName("01_46_01") || v.HasName("10_40_01") || v.HasName("02_44_01") || v.HasName("03_43_01") || v.HasName("03_24_01"))
+				{
+					if (g.IsChildEnabled("LF1")) g.SetChildEnabled("LF1", false);
+					else if(g.IsChildEnabled("LF2")) g.SetChildEnabled("LF2", false);
+				}
+				else if (v.HasName("01_33_01") || v.HasName("10_33_01")) g.SetChildEnabled("DLK", false);
+				Audio::StopSample(v.GetUserData());
+				v.EnableCommand("FOXGoUH", false);;
+				if (!g.IsChildEnabled("ELW") && !g.IsChildEnabled("LF1") && !g.IsChildEnabled("LF2") && !g.IsChildEnabled("DLK"))
+				{
+					g.Hide();
+					g.PushActionWait(ACTION_NEWLIST, time);
+					g.PushActionExecuteCommand(ACTION_APPEND, "FOXGoUH", &g, -2, false);
+					g.PushActionShowHide(ACTION_APPEND, false);
+					g.PushActionDeleteOwner(ACTION_APPEND);
+				}
+			}
+			else v.PushActionExecuteCommand(ACTION_APPEND, "FOXGoUH", &v, 0);
+		}
+		else if(childID == -2)
+		{
+			GameObject g(Target);
+			GameObjectList gl = Game::GetGameObjects(TYPE_VEHICLE);
+			for (int k = 0; k < gl.GetNumObjects(); k++)
+			{
+				Vehicle v(gl.GetObject(k));
+				if (v.IsValid() && v.HasCommand("FOXGoUH") && !v.IsCommandEnabled("FOXGoUH"))
+				{
+					v.PushActionWait(ACTION_NEWLIST, Math::rand()%10);
+					v.PushActionShowHide(ACTION_APPEND, false);
+					v.PushActionExecuteCommand(ACTION_APPEND, "FOXUnstuck", &v);
+					v.PushActionExecuteCommand(ACTION_APPEND, "VCmdParking", &v, 0, false);
+					if(v.HasCommand("FOXGoUH")) v.EnableCommand("FOXGoUH", true);
+				}
+			}
+		}
+		else 
+		{
+			if (!CheckPossible(Caller)) return;
+			GameObject g(Target);
+			if (!g.IsValid() || g.GetType() == ACTOR_VEHICLE)
+			{
+				GameObjectList GL = Game::GetGameObjectsWithPrefix("FOXCM_CALL");
+				for (int k = 0; k < GL.GetNumObjects(); k++)
+				{
+					if (GL.GetObject(k)->HasCommand("FOXGoUH") && !GL.GetObject(k)->IsHidden())
+					{
+						if (!g.IsCommandEnabled("FOXGoUH") && !(v.HasName("01_33_01") || v.HasName("10_33_01"))) continue;
+						GameObject g(GL.GetObject(k));
+						break;
+					}
+				}
+			}
+			if (g.IsValid() && g.GetType() != ACTOR_VEHICLE)
+			{
+				if (!g.IsCommandEnabled("FOXGoUH") && !(v.HasName("01_33_01") || v.HasName("10_33_01"))) return;
+				v.PushActionWait(ACTION_NEWLIST, 0.5f);
+				if (Caller->HasCommand("FOXFreeToCall")) Caller->PushActionExecuteCommand(ACTION_APPEND, "FOXFreeToCall", &v, 1);
+				if (!v.IsBlueLightEnabled()) v.PushActionExecuteCommand(ACTION_APPEND, "VCmdBlue", &v, 0, false);
+				v.PushActionExecuteCommand(ACTION_APPEND, "VcmdSiren", &v);
+				v.PushActionMove(ACTION_APPEND, g.GetPosition());
+				v.PushActionExecuteCommand(ACTION_APPEND, "FOXGoUH", &g, -1, false);
+				return;
+			}
+			Mission::PlayHint("FHint_22");
+			System::Log("Uberlandhilfe : no object found %s", v.GetName());
+		}
+	}
+};
+object FOXCivGoHome: CommandScript
+{
+	FOXCivGoHome(){}
+	bool CheckPossible(GameObject *Caller){return true;}
+	bool CheckTarget(GameObject *Caller, Actor *Target, int childID){return true;}
+	void PushActions(GameObject *Caller, Actor *Target, int childID)
+	{
+		char pID[255]; char speeds[10];	char Hint[255];
+		Person t(Caller);
+		if (!t.IsValid()) return;
+		
+		int numpaths=7;
+		///Aufgabe: Nähe Path <4000, alles drin random; sonst nächster
+		int minind=-1,found=0,numrealpaths=0;
+		float maxdist=1000,mindist=99999;
+		if (minind == -1)
+		{
+			if(childID==0){
+				//suche
+				for(int i=0;i<numpaths;i++){
+					snprintf(pID, 128, "CivilPers%i", i+1);
+					Caller->SetObjectPath(pID, 6.4f, true);
+					Path pa = Caller->GetObjectPath();
+						GameObject obj=Game::CreateObject("mod:Prototypes/Objects/Equipment/unsichtbar.e4p","patrol");
+						obj.SetUserData(i);
+						numrealpaths++;
+						Vector posp=pa.GetNearestPoint(Caller->GetPosition());
+						obj.Show();obj.SetPosition(posp);
+						float dist=obj.DistanceXY(Caller);
+						if(dist<maxdist){found++;
+						}else if(found==0&&dist<mindist){
+							mindist=dist;
+							minind=i;
+						}else obj.PushActionDeleteOwner(ACTION_NEWLIST);
+				}
+				//Suche erledigt
+				GameObjectList objs=Game::GetGameObjects("patrol");
+				if(found==0&&minind==-1){
+					minind=Math::rand()%numrealpaths;
+				}else if(found>0){
+					int ind=Math::rand()%found;
+					for(int i=0;i<objs.GetNumObjects();i++){
+							float dist=objs.GetObject(i)->DistanceXY(Caller);
+							if(dist<maxdist){
+								if(ind==0){
+									minind=objs.GetObject(i)->GetUserData();
+									i=999;
+								}else ind--;
+							}
+					}
+				}
+				
+				for(int i=0;i<objs.GetNumObjects();i++){
+					objs.GetObject(i)->PushActionDeleteOwner(ACTION_NEWLIST);
+				}
+			}else if(ChildID==0){
+				int i=0;i<numpaths;i++){
+					snprintf(pID, 255, "CivilPers%i", (i+1));
+					if(Caller->HasObjectPath(pID)){
+						minind=(i+1)%numpaths;
+					}
+				}
+				if(minind==-1)minind=0;
+			}else{
+				minind=ChildID-1;
+			}
+		}
+		snprintf(pID, 255, "CivilPers%i", (minind+1));
+		//SetIcon(pID);
+		t.SetObjectPath(pID, 1.7f, true);
+		Path pa = t.GetObjectPath();
+		Vector target = pa.GetNearestPoint(t.GetPosition());
+		t.SetPlacement(PLACEMENT_CUSTOM_PLACEMENT);
+		t.UpdatePlacement();	
+		t.RemoveObjectPath();
+		t.PushActionWait(ACTION_NEWLIST,0.0f);
+		t.PushActionMove(ACTION_APPEND, target);
+		t.PushActionUsePath(ACTION_APPEND, &pa, true, t.IsFleeing()?3.0f:1.7f);
+	}
+};
+object FOXForceGrab: CommandScript
+{
+	FOXForceGrab(){
+		SetIcon("use");
+		SetCursor("use");
+		SetGroupID(CGROUP_GETEQUIPMENT);}
+	bool CheckPossible(GameObject *Caller){ 
+		return true;}
+	bool CheckTarget(GameObject *Caller, Actor *Target, int childID){
+		if (Target->GetID() == Caller->GetID()) return false;
+		return (Target->GetType() == ACTOR_VEHICLE || Target->GetType() == ACTOR_PERSON);
+	}
+	void PushActions(GameObject *Caller, Actor *Target, int childID)
+	{
+		GameObject T(Target);
+		if (!T.IsValid()) return;
+		if (Game::IsMultiplayer() && T.GetPlayerMP() != Caller->GetPlayerMP())
+		{
+			if (T.GetType() == ACTOR_VEHICLE)
+			{
+				PersonList PL (T.GetName());
+				for (int k = 0; k < PL.GetNumPersons(); k++)
+				{
+					PL.GetPerson(k)->SetPlayerMP(Caller->GetPlayerMP());
+				}
+			}
+			T.SetPlayerMP(Caller->GetPlayerMP());
+		}
+		else 
+		{
+			if (T.GetType() == ACTOR_PERSON)
+			{
+				Person p(&T);
+				if (p.IsInjured() || p.IsDead()) return;
+			}
+			T.SetCommandable(true);
+			T.SetSelectable(true);
+		}
+	}
+};
+
+object FOXInstallAB: CommandScript
+{
+	FOXInstallAB()
+	{
+		SetIcon("install");
+		SetRestrictions(RESTRICT_SELFEXECUTE);
+	}
+	bool CheckPossible(GameObject *Caller){
+		Vehicle z(Caller);
+		if (!z.IsValid()) return;
+		if (z.GetNumUsedConnectors() > 0) return false;
+		if (z.HasCommand("TLF_Cool")) return false;
+		return true;
+	}
+	bool CheckTarget(GameObject *Caller, Actor *Target, int childID){
+		return Caller->GetID() == Target->GetID();
+	}
+	void PushActions(GameObject *Caller, Actor *Target, int childID)
+	{
+		Vehicle z(Caller);
+		if (!z.IsValid()) return;
+		if (z.GetNumUsedConnectors() > 0) return;
+		if (z.HasCommand("TLF_Cool")) return;
+		if (Caller->HasCommand("VCmdWLFUnload"))
+		{
+			if (Caller->IsChildEnabled("ABW"))
+			{
+				// install
+				Caller->ClearActions();
+				Caller->SetChildEnabled("ABW", false);
+				Caller->SetCommandable(false);
+
+				float r[9]; float y[9]; Vehicle c;
+				Vector a = Caller->GetPosition();
+				Caller->GetRotation(r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7], r[8]);
+				Vehicle c =  Game::CreateVehicle("mod:Prototypes/Vehicles/__ Feuerwehr/AB_W_02.e4p", "AB_WASSER");
+				float fx = 8.f, fy = 0.f, fz = 0.f;
+				Math::RotateVector(fx, fy, fz, r);
+				Math::EulerToMatrix(0.f, 0.f, 0.f, y);
+				Math::MultiplyMatrices(y, r);
+				a = a + Vector(fx, fy, fz);
+				c.AssignCommand("ALARM_DUMMY");
+				c.SetRotation(y[0], y[1], y[2], y[3], y[4], y[5], y[6], y[7], y[8]);
+				c.SetPosition(a);
+				
+				c.SetRotation(Caller);
+				c.SetPosition(Caller->GetPosition());
+
+				c.UpdatePlacement();
+				if (Game::IsMultiplayer()) c.SetPlayerMP(Caller->GetPlayerMP());
+				c.SetCommandable(true);
+				if (Caller->IsBlueLightEnabled()) c.PushActionExecuteCommand(ACTION_APPEND, "VCmdBlue", &c, 0, false);
+				if (!c.IsSpecialLightEnabled()) c.EnableSpecialLights(true);
+				c.RemoveCommand("VCmdInit");
+				c.RemoveCommand("GoHome");		
+				c.AssignCommand("DUMMY_INIT");
+				c.AssignCommand("VCmdDebug");
+				c.PushActionExecuteCommand(ACTION_APPEND,"ZZ_Schnitt",&c,2,false);
+				c.AssignCommand("FOXInstallAB");
+				for (int h = 1; h < 3; h++)
+				{
+					c.PushActionExecuteCommand(ACTION_INSERT, "FOXGSteuerung", &c, h);	
+				}
+			}
+		}
+		else
+		{
+			if (childID == 0)
+			{
+				GameObjectList gl = Caller->GetObjectsInRange(200.0f, ACTOR_VEHICLE);
+				if (gl.GetNumObjects() > 0)
+				{
+					for (int k = 0; k < gl.GetNumObjects(); k++)
+					{
+						Vehicle v(gl.GetObject(k));
+						if (v.HasCommand("VCmdWLFUnload"))
+						{
+							v.SetCommandable(false);
+							z.SetCommandable(false);
+							z.PushActionExecuteCommand(ACTION_INSERT, "FOXGSteuerung", &v, 99);	
+							//z.PushActionExecuteCommand(ACTION_NEWLIST,"ZZ_Schnitt",&z,100,false);
+							z.PushActionWait(ACTION_APPEND, 1.0f);
+							z.PushActionExecuteCommand(ACTION_APPEND, "FOXInstallAB", &v, 1, false);
+							return;
+						}
+					}
+				}
+			}
+			else
+			{
+				Vehicle v(Target);
+				if (!v.IsValid()) return;
+				z.PushActionDeleteOwner(ACTION_NEWLIST);
+				v.SetChildEnabled("ABW", true);
+				v.PushActionSwitchAnim(ACTION_APPEND, "wlf_aufgesattelt");
+				v.SetCommandable(true);
+			}
+		}
+	}
+};
+object FoxGenUtils: CommandScript
+{
+	FoxGenUtils(){}
+	bool CheckPossible(GameObject *Caller){return true;}
+	bool CheckTarget(GameObject *Caller, Actor *Target, int childID){return true;}
+	void PushActions(GameObject *Caller, Actor *Target, int childID)
+	{
+		switch(childID)
+		{
+			case 0:
+				Vehicle v(Caller);
+				if (!v.IsValid()) return;
+				char agt[255];
+				char name[255];
+				Game::GetGameString(v.GetName(), name, 255);
+				snprintf(agt,255,"%s Does Not Fit Through The City Gate, Must Go Around the Other Side", name);
+				ScriptInterface::ShowMessageTickerTextForSinglePlayer(&v, agt);
+				break;
+			case 1:
+			case 18:
+				GameObject g(Caller);
+				if (!g.IsChildEnabled("sparks") && !g.IsChildEnabled("dfire")) return;
+				GameObjectList persons = g.GetObjectsInRange(childID==18?150.0f:300.0f, ACTOR_PERSON);
+				for (int k = 0; k < persons.GetNumObjects(); k++)
+				{
+					Person p(persons.GetObject(k));
+					if(!p.HasCommand("repair") && !p.IsInjured() && !p.IsDead() && p.Distance(g.GetPosition().x, g.GetPosition().y, p.GetPosition().z) < 200.0f)
+					{
+						if (p.GetRole() == ROLE_SQUAD)
+						{
+							if (p.GetLife() > 400)
+							{
+								p.Hurt(INJUREREASON_ENERGY, Math::rand()%400);
+								continue;
+							}
+						}
+						p.Injure(INJUREREASON_ENERGY, false);
+						p.SetBloodPuddle(true);
+						p.SetLife(300+Math::rand()%400);
+						p.SetInjuredLifeDrain(0.5f);
+					}
+				}
+				if (Math::rand()%2 == 0) Audio::PlaySample3D("mod:Audio/FX/misc/electricity01.wav", g.GetPosition(), false);
+				g.PushActionWait(ACTION_APPEND, 3.0f);
+				g.PushActionExecuteCommand(ACTION_APPEND, "FoxGenUtils", Target, childID);
+				break;
+			case 2:
+				Person p(Target);
+				p.Show();
+				if (!p.IsFlagSet(OF_HIDDEN))p.SetFlag(OF_HIDDEN);
+				GameObjectList close = p.GetObjectsInRange(3500.0f, ACTOR_PERSON);
+				System::Log(" ~~ missing Person ~~ ");
+				for (int k = 0; k < close.GetNumObjects(); k++)
+				{
+					Person t(close.GetObject(k));
+					if (t.DistanceXY(p) < 300.0f && (t.GetRole() == ROLE_SQUAD || t.IsRescueDog() ))
+					{
+						//System::Log(" ~~ A ~~ ");
+						p.ClearFlag(OF_HIDDEN);
+						Mission::PlayHint("FHint_49");
+						Caller->PushActionDeleteOwner(ACTION_NEWLIST);
+						return;
+					}
+					if (t.IsRescueDog() && !t.IsLinkedWithPerson())
+					{
+						//System::Log(" ~~ B ~~ ");
+						if (t.GetObjectsWithNameInRange(150.0f, t.GetName(), ACTOR_PERSON).GetNumObjects(); == 0)
+						{
+							//System::Log(" ~~ C ~~ ");
+							t.PushActionMove(ACTION_NEWLIST, p.GetPosition(), true);
+							if (!p.IsInjured())
+							{
+								t.PushActionDogDig(ACTION_APPEND, 3.0f);
+								t.PushActionSwitchAnim(ACTION_APPEND, "bark");
+								t.PushActionWait(ACTION_APPEND, 50.0f);
+								t.PushActionNOP(ACTION_APPEND);
+							}
+						}
+					}
+				}
+				//p.Hide();
+				Caller->PushActionWait(ACTION_NEWLIST, 5.0f);
+				Caller->PushActionExecuteCommand(ACTION_APPEND, "FoxGenUtils", &p, 2);
+				break;
+			case 3:
+				Vehicle v(Target);
+				System::Log(" ~~ Vehicle Flight Path %s ~~ ", v.GetName());
+				PersonList pl(v.GetName());
+				for (int k = 0; k < pl.GetNumPersons(); k++)
+				{
+					Person p(pl.GetPerson(k));
+					System::Log(" ~~ considering Person %s ~~ ", p.GetName());
+					if (!p.IsArrested() && p.GetEnteredCarID() != v.GetID() && !p.IsInjured() && !p.IsDead())
+					{
+						if (p.DistanceXY(v) < 300)
+							return;
+						else
+							p.ClearActions();
+					}
+				}
+				v.SetObjectPath("carescapepath01", 8.7f, Math::rand()%2==0);
+				Path pa = v.GetObjectPath();
+				Vector target = pa.GetNearestPoint(v.GetPosition());
+				System::Log(" ~~ %s ~~ ", pa.GetName());
+				v.PushActionWait(ACTION_NEWLIST, 0.2f);
+				v.PushActionMove(ACTION_APPEND, target, false);
+				v.PushActionUsePath(ACTION_APPEND, &pa, Math::rand()%2==0, 8.7f);
+				System::Log(" ~~ Vehicle Flight Path set ~~ ");
+				break;
+			case 4:
+				int ActionRange = 1000.0f;
+				// Attack Squad
+				Person p(Caller);
+				if (p.IsInjured() || p.IsDead() || p.IsArrested()) return;
+				PersonList pl(p.GetName());
+				bool actionFound = false;
+				for (int k = 0; k < pl.GetNumPersons(); k++)
+				{
+					if (Math::rand()%2!=0) continue;
+					if ((pl.GetPerson(k)->IsArrested() || pl.GetPerson(k)->GetEnteredCarID() != -1) && p.IsPoliceSquadInRange(ActionRange))
+					{
+						actionFound = true;
+						p.SetBehaviour(BEHAVIOUR_GANGSTER_FISTFIGHT);
+						return;
+					}
+				}
+				if (!actionFound)
+				{
+					p.SetAnimation("idle");
+					int rand = Math::rand()%25;
+					// Molotov
+					if (rand == 0)
+					{
+						GameObjectList zl = p.GetObjectsInRange(ActionRange, ACTOR_OBJECT | ACTOR_HOUSE | ACTOR_OPEN_HOUSE);
+						//p.SetBehaviour(BEHAVIOUR_GANGSTER_THROWMOLOTOV);
+						if (zl.GetNumObjects() > 0){
+							int index = Math::rand()%zl.GetNumObjects();
+							p.PushActionMove(ACTION_NEWLIST, zl.GetObject(index), TARGET_HOUSE_SAFE_DISTANCE);
+							p.PushActionTurnTo(ACTION_APPEND, zl.GetObject(index));
+							p.PushActionThrowMolotov(ACTION_APPEND, zl.GetObject(index)->GetPosition(), 1000);
+						}
+					
+					}
+					else if (rand < 3)
+					{
+						// Attack Person
+						GameObjectList zl = p.GetObjectsInRange(ActionRange, ACTOR_PERSON);	
+						if (zl.GetNumObjects() > 0) p.PushActionFistFight(ACTION_NEWLIST, zl.GetObject(Math::rand()%zl.GetNumObjects()), true);
+					}
+					// GoHome
+					else if (rand < 4)
+					{
+						p.SetRole(ROLE_CIVILIAN);
+						p.SetBehaviour(BEHAVIOUR_CIVILIAN_NORMAL);
+						p.PushActionExecuteCommand(ACTION_NEWLIST, "FOXCivGoHome");
+						p.SetUserData(-1);
+						return;
+					}					
+					else if(rand < 10)
+					{
+						// Attack Person
+						p.SetBehaviour(BEHAVIOUR_GANGSTER_THROWSTONES);
+					}
+					// Protest
+					else
+					{
+						p.SetBehaviour(BEHAVIOUR_GANGSTER_CIVILUNARMED);
+						Vector po = p.GetPosition();
+						p.PushActionMove(ACTION_NEWLIST, po + Vector(300-Math::rand()%600, 300-Math::rand()%600, 0));
+						p.PushActionSwitchAnim(ACTION_APPEND, "demonstrate");
+					}
+					p.PushActionWait(ACTION_APPEND, 20.0f + Math::rand()%20);
+					p.PushActionExecuteCommand(ACTION_APPEND, "FoxGenUtils", &p, 4);
+				}
+				break;
+			case 5:
+				GameObjectList gl = Caller->GetObjectsInRange(2000.0f, ACTOR_PERSON);
+				for (int i = 0; i < gl.GetNumObjects(); i++)
+				{
+					System::Log(" ~~ Looking For Gangster %i %i, %s ~~ ", i, gl.GetNumObjects(), gl.GetObject(i)->GetName());
+					if (Person(gl.GetObject(i)).GetRole() == ROLE_GANGSTER){
+						Person gan(gl.GetObject(i));
+						if (gan.IsInjured() || gan.IsArrested() || gan.IsDead() || !gan.IsCurrentAction("EActionWait")) continue;
+						System::Log(" ~~ Gangster Found ~~ ");
+						Caller->PushActionWait(ACTION_APPEND, 10.0f);
+						Caller->PushActionExecuteCommand(ACTION_APPEND, "FoxGenUtils", Caller, 5);
+						return;
+					} 
+				}
+				Audio::StopSample(Caller->GetUserData());
+				Caller->PushActionDeleteOwner(ACTION_NEWLIST);
+				break;
+			// Schornsteinbrand
+			case 6:
+				GameObject House = Caller->GetClosestObjectInRange(1000.0f, ACTOR_HOUSE);
+				House.Burn();
+				for (int k = 0; k < House.GetNumFireChilds(); k++)
+				{
+					House.GetFireChild(k).SetTemperature(300);
+				}
+				GameObject particle = Game::CreateObject("mod:Prototypes/Objects/Particles/explosioncar02.e4p", "particle");
+				particle.SetPosition(Caller->GetPosition());
+				particle.StartParticleEffect();
+				particle.PushActionWait(ACTION_APPEND, 10.0f);
+				particle.PushActionDeleteOwner(ACTION_APPEND);
+				Audio::PlaySample3D("mod:Audio/FX/destruction/Explosion02.wav", Caller->GetPosition(), false);
+				break;
+			case 7:
+				Person p(Caller);
+				GameObjectList gl(p.GetName());
+				for (int k = 0; k < gl.GetNumObjects(); k++)
+				{
+					GameObject g(gl.GetObject(k));
+					if(g.IsBurning())
+					{
+						Vector dir = p.GetPosition() - g.GetPosition();
+						Vector zpos = g.GetPosition() + Vector(dir.x*0.6f,dir.y*0.6f,dir.z*0.6f);
+						Game::FindFreePosition(&p, zpos, 400.0f);
+						p.PushActionExecuteCommand(ACTION_APPEND, "FoxGenUtils", &g, 8);
+						p.PushActionMove(ACTION_APPEND, zpos);
+						p.PushActionTurnTo(ACTION_APPEND, &g);
+						p.PushActionSwitchAnim(ACTION_APPEND, "gape");
+						p.PushActionWait(ACTION_APPEND, 2.0f);
+						return;
+					}
+				}
+				p.PushActionExecuteCommand(ACTION_APPEND, "FOXCivGoHome");
+			case 8:
+				System::Log("~~ 8 ~~ ");
+				Person p(Caller);
+				GameObject g(Target);
+				g.StopBurning();
+				for (int i = 0; i < g.GetNumFireChilds(); i++)
+				{
+					g.GetFireChild(i).SetTemperature(0);
+					g.GetFireChild(i).Stop();
+					g.GetFireChild(i).SetTemperature(0);
+					System::Log(" ~~ 8 stopping fire ~~ ");
+				}
+				g.StopBurning();
+				p.PushActionExecuteCommand(ACTION_APPEND, "FoxGenUtils", Caller, 7);
+				break;
+			case 9: // Hydrant Defekt Wasser
+				GameObjectList gl = Caller->GetObjectsInRange(300.0f, ACTOR_VEHICLE );
+				for (int k = 0; k < gl.GetNumObjects(); k++)
+				{
+					Vehicle v(gl.GetObject(k));
+					if (v.HasObjectPath(NULL) && !v.IsCurrentAction("EActionWait"))
+					{
+						//v.PushActionWait(ACTION_NEWLIST, 15.0f);
+					}
+				}
+				Caller->PushActionWait(ACTION_APPEND, 3.0f);
+				Caller->PushActionExecuteCommand(ACTION_APPEND, "FoxGenUtils", Caller, 9);
+				break;
+			case 70:
+			case 71:
+				GameObject g(Target);
+				Person p(Caller);
+				if (childID == 70 || g.IsBurning() || g.DistanceXY(Caller) > 400.0f)
+				{
+					// search new
+					for (int k = 5; k < 100; k++)
+					{
+						GameObjectList gl = p.GetObjectsInRange(Math::pow(2, k), ACTOR_OBJECT);
+						bool found = false;
+						for (int m = 0; m < gl.GetNumObjects(); m++)
+						{
+							GameObject tar(gl.GetObject(m));
+							if (tar.HasName("feu") && !tar.IsBurning() && tar.GetNumFireChilds() > 0 && !tar.HasCommand("PolAction")){
+								g = tar;
+								found = true;
+								break;
+							}
+						}
+						if (found) break;
+					}
+					// burn
+					p.PushActionMove(ACTION_NEWLIST, g.GetPosition());
+					p.PushActionTurnTo(ACTION_APPEND, g.GetPosition());
+					p.PushActionSwitchAnim(ACTION_APPEND, "talkto");
+					p.PushActionWait(ACTION_APPEND, 150.0f);
+					p.PushActionExecuteCommand(ACTION_APPEND, "FoxGenUtils", &g, 71);
+				}
+				else
+				{
+					g.Burn();
+					g.AssignCommand("PolAction");
+					char vname[32];
+					snprintf(vname, 32, "FOXCM_CALL_%i_O", p.GetUserData());
+					GameObject todo = Game::CreateVehicle("mod:Prototypes/Vehicles/wFreeplay/ToDoInd.e4p", vname);
+					todo.SetPosition(g.GetPosition());					
+					g.SetUserData(todo.GetID());
+					todo.SetUserData(p.GetID());
+					p.PushActionExecuteCommand(ACTION_NEWLIST, "FoxGenUtils", &g, 70);
+				}
+				// Verhalten Brandstifter.
+				break;
+			// Drogendeal Iteration
+			case 10:
+				Person Dealer = Game::CreatePerson("mod:Prototypes/Persons/Civil/gangster_07.e4p", Caller->GetName());
+				Vector pos = Caller->GetPosition();
+				pos = pos + Vector((Math::rand()%300)-600,(Math::rand()%300)-600, 0);
+				Game::FindFreePosition(&Dealer, pos, 1000.0f);
+				Dealer.SetPosition(pos);
+				Caller->Hide();
+				Caller->RemoveCommand("FOXCMBLOCK");
+				GameObjectList GL = Dealer.GetObjectsInRange(1000.0f, ACTOR_PERSON);
+				if (GL.GetNumObjects() > 0)
+				{
+					Person tar(GL.GetObject(Math::rand()%GL.GetNumObjects()));
+					if (tar.GetRole() == ROLE_CIVILIAN && !tar.HasNamePrefix("FOXCM") && tar.GetGender() != GENDER_CHILD)
+					{
+						Dealer.ChangePrototype(tar.GetPrototypeFileName());
+					}
+				}
+				Dealer.SetRole(ROLE_GANGSTER);
+				Dealer.SetBehaviour((Math::rand()%5==0)? BEHAVIOUR_GANGSTER_CIVILARMED:BEHAVIOUR_GANGSTER_CIVILUNARMED);
+				Dealer.AssignCommand("FOXCMWIT");
+				Dealer.SetUserData(-666);
+				Dealer.SetCivilsFleeRange(0.0f);
+				Dealer.SetFleeing(false, false);
+				Dealer.PushActionSwitchAnim(ACTION_APPEND, "dealerwaiting2");
+				Caller->PushActionWait(ACTION_APPEND, 5.0f);
+				Caller->PushActionExecuteCommand(ACTION_APPEND, "FoxGenUtils", &Dealer, 11);
+				// Dealer erstellen
+				// warten
+			break;
+			case 11:
+			case 12:
+				Person Dealer(Target);
+				if (!Dealer.IsValid() || Dealer.IsInjured() || Dealer.IsDead() || Dealer.IsArrested() || Dealer.GetEnteredCarID() != -1 || Dealer.HasObjectPath(NULL))
+				{
+					Caller->PushActionDeleteOwner(ACTION_NEWLIST);
+					System::Log(" ~~ Dealer Object removed ~~ ");
+					return;
+				}
+				GameObjectList gl = Dealer.GetObjectsInRange(800.0f, ACTOR_PERSON | ACTOR_VEHICLE);
+				for (int k = 0; k < gl.GetNumObjects(); k++)
+				{
+					if (gl.GetObject(k)->HasNamePrefix("PP") && (!gl.GetObject(k)->HasNamePrefix("PP_10_09")||(gl.GetObject(k)->GetType() == ACTOR_VEHICLE && Vehicle(gl.GetObject(k)).IsBlueLightEnabled())))
+					{
+						Caller->PushActionDeleteOwner(ACTION_NEWLIST);
+						Dealer.PushActionExecuteCommand(ACTION_NEWLIST, "FoxGenUtils", &Dealer, 13);
+						System::Log(" ~~ Dealer Object removed, Cops nearby ~~ ");
+						return;
+					}
+				}
+				if (Math::rand()%6==0)
+				{
+					System::Log(" ~~ Deal suche Kaufer ~~ ");
+					GameObjectList tar = Dealer.GetObjectsInRange(1600.0f, ACTOR_PERSON );
+					for (int k =0 ; k < tar.GetNumObjects(); k++)
+					{
+						Person p(tar.GetObject(k));
+						if (p.GetGender() != GENDER_CHILD && p.GetGender() != GENDER_ANIMAL && p.GetRole() == ROLE_CIVILIAN && !p.HasNamePrefix("F") && p.GetEnteredHouseID() == -1 && p.GetEnteredCarID() == -1 && !p.IsInjured() && !p.IsDead() && !p.IsArrested())
+						{
+							if (p.HasObjectPath(NULL)) p.RemoveObjectPath();
+							// Käufer erstellen
+							System::Log(" ~~ Deal Kaufer erstellt ~~ ");
+							p.PushActionMove(ACTION_NEWLIST, Dealer.GetPosition());
+							p.PushActionTurnTo(ACTION_APPEND, &Dealer);
+							p.PushActionExecuteCommand(ACTION_APPEND, "FoxGenUtils", &Dealer, 14);
+							Caller->PushActionWait(ACTION_APPEND, 10.0f);
+							break;
+						}
+					}
+				}
+				Caller->PushActionWait(ACTION_APPEND, 10.0f);
+				Caller->PushActionExecuteCommand(ACTION_APPEND, "FoxGenUtils", &Dealer, 12);				
+			break;
+			case 13:
+				// Dealer haut ab -> PushActionDeleteOwner
+				Caller->PushActionExecuteCommand(ACTION_NEWLIST, "FOXCivGoHome");
+				Caller->RemoveCommand("FOXCMWIT");
+				if (Caller->GetUserData() != -145465)
+				{
+					Person p(Caller);
+					p.SetRole(ROLE_CIVILIAN);
+					p.SetBehaviour(BEHAVIOUR_CIVILIAN_NORMAL);
+					p.SetUserData(0);
+				}
+			break;
+			case 14:
+				// Deal
+				Person Dealer(Target);
+				Person p(Caller);
+				if(!Dealer.IsValid() || Dealer.IsArrested() || Dealer.GetEnteredCarID() !=-1 || Dealer.Distance(&p) > 150.0f)
+					p.PushActionExecuteCommand(ACTION_NEWLIST, "FOXCivGoHome");
+				else 
+				{
+					Dealer.PushActionTurnTo(ACTION_NEWLIST, &p);
+					Dealer.PushActionSwitchAnim(ACTION_APPEND, "talkto");
+					Dealer.PushActionWait(ACTION_APPEND, 3.0f);
+					Dealer.PushActionExecuteCommand(ACTION_APPEND, "FoxGenUtils", &Dealer, 15);
+					Dealer.PushActionWait(ACTION_APPEND, 3.0f);
+					Dealer.PushActionExecuteCommand(ACTION_APPEND, "FoxGenUtils", &Dealer, 16);
+					Dealer.PushActionWait(ACTION_APPEND, 6.0f);
+					Dealer.PushActionSwitchAnim(ACTION_APPEND, "dealerwaiting2");
+					Dealer.SetUserData(-145465);
+					p.PushActionSwitchAnim(ACTION_APPEND, "talkto");
+					p.PushActionWait(ACTION_APPEND, 6.0f);
+					p.PushActionExecuteCommand(ACTION_APPEND, "FoxGenUtils", &Dealer, 15);
+					p.PushActionWait(ACTION_APPEND, 3.0f);
+					p.PushActionExecuteCommand(ACTION_APPEND, "FoxGenUtils", &Dealer, 16);
+					p.PushActionWait(ACTION_APPEND, 3.0f);
+					p.SetRole(ROLE_GANGSTER);
+					p.SetBehaviour(BEHAVIOUR_GANGSTER_CIVILUNARMED);
+					p.PushActionExecuteCommand(ACTION_APPEND, "FOXCivGoHome");
+				}
+			break;
+			case 15:
+				Person p(Caller);
+				p.PlaceObjectInRightHand("Equipment/Hanfbeutel.v3o");
+				p.SetAnimation("talkto");
+			break;
+			case 16:
+				Person p(Caller);
+				p.RemoveObjectInRightHand();
+				p.SetAnimation("talkto");
+			break;
+			// AB-Mulde Auto entfernen
+			case 17:
+				Caller->SetChildEnabled("fzg", false);
+				Caller->SetChildEnabled("wasser", false);
+				break;
+			case 19:
+				System::Log(" ~~ Feuerlöscher call ~~ ");
+				GameObject t(Caller);
+				Person p(Target);
+				t.SetChildEnabled("dfire", false);
+				t.RemoveCommand("FOXCMBURNBLOCK");
+				t.RemoveCommand("FOXCMBLOCK");
+				if (t.HasCommand("FOXEquipBlock")) t.RemoveCommand("FOXEquipBlock");
+				if (p.IsValid() && p.GetEquipment() == EQUIP_FIRE_EXTINGUISHER)
+					p.RemoveEquipment();
+				if (p.IsValid()) p.SetCommandable(true);
+				p.PushActionMove(ACTION_NEWLIST, t.GetPosition());
+				break;
+			case 20:
+				GameObject g(Target);
+				if (Caller->Distance(&g) > 500.0f) return;
+				if (g.IsValid() && g.HasCommand("FOXCMBLOCK"))
+					g.Burn();
+				g.RemoveCommand("FOXCMBLOCK");
+				g.RemoveCommand("STADTAction");
+				break;
+			case 21:	// Chlorgase Check
+				OpenHouse oh(Target);
+				if (!oh.IsValid()) return;
+				if (Caller->GetUserData() < 0){
+					Caller->RemoveCommand("FOXCMBLOCK");
+					Caller->SetChildEnabled("gsg", false);
+					return;
+				} 
+				for (int m = 0; m < 2; m++)
+				{
+					if (m == 0) PersonList pl = oh.GetSquadPersonsInside();
+					else PersonList pl = oh.GetNonSquadPersonsInside();
+					for (int k = 0; k < pl.GetNumPersons(); k++){
+						Person t(pl.GetPerson(k));
+						if (t.IsValid() && t.GetResistance(INJUREREASON_FIRE) < 150 && !t.IsInjured() && !t.IsDead() && !t.HasCommand("FOXCMINJURED") && !t.IsFlagSet(OF_HIDDEN && !t.IsHidden()))
+						{
+							System::Log(" ~~ Person Found Hurting %s %s ~~ ", t.GetPrototypeName(), t.GetName());
+							if (t.GetHealth() > 150.0f) t.Hurt(INJUREREASON_UNKNOWN, Math::rand()%150);
+							else
+							{
+								t.Injure(INJUREREASON_UNKNOWN, false);
+								t.SetBloodPuddle(true);
+								t.SetLife(950);
+								t.SetInjuredLifeDrain(2.5f);
+							}
+						}
+					}
+				}
+				if (!Caller->HasCommand("has_leck")) Caller->SetUserData(Caller->GetUserData()-1);
+				Caller->PushActionWait(ACTION_NEWLIST, 1.0f);
+				Caller->PushActionExecuteCommand(ACTION_APPEND, "FoxGenUtils", Target, 21);
+				break;
+			case 22:
+				// Target Checks
+				System::Log(" ~~ 22 ~+");
+				GameObject c(Caller);
+				GameObject t(Target);
+				if (!c.IsValid() || !t.IsValid() || !(t.IsCurrentAction("EActionExtinguish") || t.IsCurrentAction("EActionCool"))) return;
+				System::Log(" ~~ not returned ~+");
+				if (c.HasName("ebox") && c.IsBurning())
+				{
+					System::Log(" ~~ ebox ~+");
+					if (t.GetType() == ACTOR_PERSON) 
+					{
+						Person p(&t);
+						p.Injure(INJUREREASON_ENERGY, false);
+						p.SetInjuredLifeDrain(2.0f);
+						p.SetHealth(300 + Math::rand()%700);
+						Audio::PlaySample3D("mod:Audio/FX/misc/electricity01.wav", p.GetPosition(), false);
+						Mission::PlayHint("FHint_79");
+					}
+				}
+				else if (c.HasCommand("gefahrgut") &&
+				(
+					((t.HasCommand("FOXHabeSchaumrohr") || t.HasCommand("DUSES")) && c.HasCommand("FOXCMSCHAUMREACT"))
+					|| (!(t.HasCommand("FOXHabeSchaumrohr") || t.HasCommand("DUSES")) && c.HasCommand("FOXCMWATREACT"))
+				))
+				{
+					c.PushActionExecuteCommand(ACTION_NEWLIST, "FoxGenUtils", &c, 23);
+					c.PushActionWait(ACTION_APPEND, 4+Math::rand()%6);
+					if (Math::rand()%3!=0)c.PushActionExecuteCommand(ACTION_APPEND, "FoxGenUtils", &t, 22);
+				}
+				else if((c.GetUserData() != -96 && c.HasCommand("DummyIsOelspur") && Math::rand()%3!=0 && !(t.HasCommand("FOXHabeSchaumrohr") || t.HasCommand("DUSES"))))
+				{
+					System::Log("~~Oel~~");
+					GameObject n = Game::CreateObject(c.GetPrototypeFileName(), c.GetName());
+					Vector pos = c.GetPosition() +( (c.GetPosition()-t.GetPosition()).GetNormal() * (50+Math::rand()%100));
+					n.SetRotation(&c);
+					n.AssignCommand("DummyIsOelspur");
+					n.SetUserData(-96);
+					if (Game::FindFreePosition(&n, pos, 80.0f))
+					{
+						System::Log("~~posFound~~");
+						n.SetPosition(pos);
+						if (c.IsBurning()) n.Burn();
+						c.PushActionWait(ACTION_APPEND, 4+Math::rand()%6);
+						c.PushActionExecuteCommand(ACTION_APPEND, "FoxGenUtils", &t, 22);
+					}
+					else Game::RemoveGameObject(&n);
+				}
+				break;
+			case 23:
+				// Explosion Gefahrgut klein
+				if (!GameObject(Target).IsValid()) return;
+				GameObjectList gl = GameObject(Target).GetObjectsInRange(300.0f, ACTOR_OBJECT | ACTOR_PERSON );
+				for (int k = 0; k < gl.GetNumObjects(); k++)
+				{
+					if (gl.GetObject(k)->GetType() == ACTOR_PERSON)
+					{
+						System::Log("~~PersonFOund~~");
+						Person tp(gl.GetObject(k));
+						System::Log(" %i", (int) GameObject(Target).Distance(&tp));
+						if (GameObject(Target).Distance(&tp) < 200 /*&& tp.GetResistance(INJUREREASON_FIRE) < 150*/)
+						{
+							tp.Injure(INJUREREASON_FIRE, true);
+						}
+						//tp.Injure(INJUREREASON_FIRE, true);
+					}
+					else
+					{
+						GameObject g(gl.GetObject(k));
+						if (Math::rand()%2==0) continue;
+						if (g.GetNumActiveFireChilds() == 0) continue;
+						for (int m = 0; m <g.GetNumFireChilds(); m++)
+						{
+							FireObject f = g.GetFireChild(m);
+							f.SetTemperature(1000.0f);
+							f.Burn();
+							f.Large();
+						}
+					}
+				}
+				if (GameObject(Target).GetNumActiveFireChilds() > 0)
+				{
+					GameObject(Target).Burn();
+					for (int k = 0; k < GameObject(Target).GetNumFireChilds(); k++)
+					{
+						GameObject(Target).GetFireChild(k).SetTemperature(GameObject(Target).GetFireChild(k).GetMaxMaterialTemperature()*0.5f);
+					}
+				}
+				GameObject particle = Game::CreateObject("mod:Prototypes/Objects/Particles/explosioncar02.e4p", "particle");
+				particle.SetPosition(GameObject(Target).GetPosition());
+				particle.StartParticleEffect();
+				particle.PushActionWait(ACTION_APPEND, 5.0f);
+				particle.PushActionDeleteOwner(ACTION_APPEND);
+				Audio::PlaySample3D("mod:Audio/FX/destruction/Explosion02.wav", GameObject(Target).GetPosition(), false);
+				break;
+			case 24:
+				float change = 0.5f;
+				bool extinguish = false;
+				extinguish = false;
+				GameObject g(Caller);
+				GameObject t(Target);
+				if(!g.IsValid()) return;
+				if (g.GetUserData() != -1 && t.IsValid())
+				{
+					GameObject p(& Game::GetActor( g.GetUserData()) );
+					if (p.IsValid() && (p.IsCurrentAction("EActionExtinguish") || p.IsCurrentAction("EActionCool")) )
+						extinguish = true;
+				}
+				if (!extinguish)
+				{
+					//System::Log(" ~~ extinguish Stop ~~ )");
+					if( g.GetUserData() != -1) g.SetUserData(-1);
+					if (g.GetPosition().z < Game::GetGroundHeight(g.GetPosition().x, g.GetPosition().y))
+					{ 
+						Caller->PushActionDeleteOwner(ACTION_NEWLIST);
+						if (t.IsValid())
+						{
+							for (int k = 0; k < t.GetNumFireChilds(); k++) t.GetFireChild(k).SetActive(true);
+							if (t.GetType() == ACTOR_VEHICLE) { Vehicle(&t).SetSmoking(false); Vehicle(&t).SetSmokeLevelDuration(40.0f); }
+						}
+					}
+					else g.SetPosition(g.GetPosition()-Vector(0,0,change*0.2f));
+					g.PushActionWait(ACTION_APPEND, 4.0f);
+				}
+				else 
+				{
+					if (g.GetPosition().z -15 > Game::GetGroundHeight(g.GetPosition().x, g.GetPosition().y)){
+						if (t.HasCommand("DummyIsOelspur")) {
+							t.PushActionDeleteOwner(ACTION_NEWLIST);
+							GameObject t2(& Game::GetActor(t.GetUserData()));
+							if (t2.IsValid()) t2.PushActionDeleteOwner(ACTION_NEWLIST);
+						}
+						t.StopBurning();
+						for (int k = 0; k < t.GetNumFireChilds(); k++){
+							t.GetFireChild(k).SetTemperature(0);
+							t.GetFireChild(k).Stop();
+							t.GetFireChild(k).SetTemperature(0);
+						 	t.GetFireChild(k).SetActive(false);
+						}
+						t.StopBurning();
+						if (t.GetType() == ACTOR_VEHICLE) { Vehicle(&t).SetSmoking(false); Vehicle(&t).SetSmokeLevelDuration(1000.0f); }
+						GameObject p(& Game::GetActor( g.GetUserData()) );
+						if (p.IsValid()){ 
+
+							p.ClearActions();
+							if (p.GetType() == ACTOR_PERSON) Person(&p).SetIdleAnimation();
+						}
+						if (t.IsChildEnabled("r1") && !t.IsChildEnabled("r2")) t.SetChildEnabled("r1", false);
+						g.SetUserData(-1);
+						float range = 170.0f;
+						GameObjectList gl(t.GetObjectsInRange(2*range, ACTOR_OBJECT ) );
+						for (int m = 0; m < gl.GetNumObjects(); m++)
+						{
+							GameObject gt(gl.GetObject(m));
+							if (gt.HasCommand("DummyIsOelspur") && !gt.HasCommand("gefahrgut") && gt.DistanceXY(&g) < range) {
+								gt.PushActionDeleteOwner(ACTION_NEWLIST);
+								GameObject t3(& Game::GetActor(gt.GetUserData()));
+								if (t3.IsValid()) t3.PushActionDeleteOwner(ACTION_NEWLIST);
+							}
+							if (gt.GetNumActiveFireChilds() == 0 || gt.GetType() == ACTOR_HOUSE || gt.GetType() == ACTOR_OPEN_HOUSE) continue;
+							
+							for (int k = 0; k < gt.GetNumFireChilds(); k++){
+								if (g.Distance(gt.GetFireChild(k).GetPosition().x, gt.GetFireChild(k).GetPosition().y, gt.GetFireChild(k).GetPosition().z) > range) continue;
+								gt.StopBurning();
+								gt.GetFireChild(k).SetTemperature(0);
+								gt.GetFireChild(k).Stop();
+								gt.GetFireChild(k).SetTemperature(0);
+								gt.StopBurning();
+							}
+							/*
+							if (!gt.IsChildEnabled("r2") && gt.IsChildEnabled("r1"))
+							{
+								gt.SetChildEnabled("r1", false);
+							}*/
+							
+						}
+					}
+					else{
+					 	g.SetPosition(g.GetPosition()+Vector(0,0,change));
+					}
+					g.PushActionWait(ACTION_APPEND, 1.0f * (t.IsValid()&&t.GetType()!=ACTOR_VEHICLE)?t.GetNumFireChilds():1);
+				}
+				g.PushActionExecuteCommand(ACTION_APPEND, "FoxGenUtils", &t, 24, false);
+			break;
+			case 101:
+				Caller->ClearFlag(OF_HIDDEN);
+				break;
+			case 969:
+				System::Log("~uDc %i %s", Caller->GetUserData(), Caller->GetName());
+				//Caller->PushActionWait(ACTION_APPEND, 1.0f);
+				Caller->PushActionExecuteCommand(ACTION_APPEND, "FoxGenUtils", Caller, 969, false);
+				break;
+		}
+	}
+};
+bool toggle = false;
+object FoxToogle: CommandScript
+{
+	FoxToogle()
+	{
+		SetIcon("scoutmine");
+	}
+	bool CheckPossible(GameObject *Caller){return true;}
+	bool CheckTarget(GameObject *Caller, Actor *Target, int childID){return Caller->GetID() == Target->GetID();}
+	void PushActions(GameObject *Caller, Actor *Target, int childID)
+	{
+		GameObjectList GL("FOXAZ");
+		toggle = !toggle;
+		for (int k = 0; k < GL.GetNumObjects(); k++)
+		{
+			if (GL.GetObject(k)->HasCommand("FOXCMStart"))
+			{
+				toggle?GL.GetObject(k)->Show():GL.GetObject(k)->Hide();
+			}
+		}
+	}
+};

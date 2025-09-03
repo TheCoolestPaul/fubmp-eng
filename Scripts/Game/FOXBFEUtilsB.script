@@ -1,0 +1,793 @@
+Vector eingang; Vector wache; Vector wendep; Vector richtung; Vector parkpos;
+char AlarmString[7]; char FireResistance[3];
+int ZUFALL;
+Person p; Actor eing; Actor fz;
+int DummyGroup_b = "23";
+int soundlauf = 0;
+	
+object Desi_Startklar : CommandScript
+{
+	Desi_Startklar()
+	{ }
+
+	void PushActions(GameObject *Caller, Actor *Target, int ChildID)
+	{
+		Vehicle v(Caller);
+		v.SetUserData(2);
+		v.SetCommandable(true);
+		v.SetSelectable(true);
+		v.PushActionExecuteCommand(ACTION_NEWLIST,"END_ALARM",Caller,0,true);
+		v.PushActionExecuteCommand(ACTION_APPEND, "FMS", Caller, 2, false);
+		char Namestring[255];
+		char Hint[255];
+		Game::GetGameString(v.GetPrototypeName(), Namestring, 255);
+		snprintf(Hint, 255, "%s: Disinfection completed.", Namestring);
+		if (Game::IsMultiplayer()){ScriptInterface::ShowMessageTickerTextForSinglePlayer(&v, Hint);}
+		else{Game::ShowHelpTextWindow(Hint);}
+	}
+};
+
+object GoWache : CommandScript
+{
+	GoWache()
+	{ }
+
+	bool CheckTarget(GameObject *Caller, Actor *Target, int ChildID)
+	{
+		if(!Caller->IsValid() || !Target->IsValid() || Target->GetID() != Caller->GetID() || Caller->GetType() != ACTOR_VEHICLE) return false;
+		 return true;
+		return false;
+	}
+
+	void PushActions(GameObject *Caller, Actor *Target, int ChildID)
+	{
+		Actor fzb;	
+		ActorList Lbase(Caller->GetName());		
+		for(int i = 0; i < Lbase.GetNumActors(); i++)
+		{
+			if (Lbase.GetActor(i)->GetType() == ACTOR_VIRTUAL) fzb = *Lbase.GetActor(i);
+		}
+		Vector WachePosition = fzb.GetPosition();
+		if (Caller->Distance(WachePosition.x, WachePosition.y, WachePosition.z) > 1500)
+		{
+			Caller->SetCommandable(true);
+			Caller->SetSelectable(true);
+			Caller->ClearActions();
+			char Namestring[255];
+			char hint[255];
+			Game::GetGameString(Caller->GetPrototypeName(), Namestring, 255);
+	   		snprintf(hint,128,"%s Couldn't find the way to the guard station", Namestring);
+			Mission::PlayHint(hint);
+			return;
+		}
+		Caller->SetPosition(WachePosition);
+		Caller->UpdatePlacement();
+		GameObjectList Block = Caller->GetObjectsInRange(500.0f, ACTOR_PERSON);
+		fzb.SetVirtualObjectTerrain("Land / no persons");
+		for (int k = 0; k < Block.GetNumObjects(); k++)
+		{
+			Person p (Block.GetObject(k));
+			Vector Pos = p.GetPosition();
+			bool suc = Game::FindFreePosition(&p, Pos, 600.0f);
+			//System::Log(" ~~ UNSTUCK ATTEMPT %i ~~ ", suc?1:0);
+			//Caller->Hide();
+			p.SetPosition(Pos);
+			//Caller->Show();
+		}
+		fzb.SetVirtualObjectTerrain("Freely accessible");
+		//Caller->PushActionWait(ACTION_INSERT, 0.1f);
+		if (Caller->HasName("KR_01_01") || Caller->HasName("05_19_01") ||Caller->HasName("04_14_01") || Caller->HasName("04_24_01") 
+		 || Caller->HasName("04_43_01") || Caller->HasName("04_74_01") || Caller->HasName("06_10_01") || Caller->HasName("06_23_01")
+		 || Caller->HasName("05_42_01") || Caller->HasName("06_47_01") || Caller->HasName("19_82_01") || Caller->HasName("13_82_01")
+		 || Caller->HasName("13_83_01") || Caller->HasName("13_83_02") || Caller->HasName("20_82_01") || Caller->HasName("14_81_01")
+ 		 || Caller->HasName("14_82_01") || Caller->HasName("14_83_01") || Caller->HasName("14_83_02") || Caller->HasName("30_25_01") || Caller->HasName("30_10_01"))
+		{
+			Caller->Hide();
+			Caller->EnableHeadLights(true);
+		}
+		 
+		else if ( Caller->HasName("14_85_01") || Caller->HasName("20_83_01") || Caller->HasName("20_83_02") 
+		 || Caller->HasName("PP_30_01") || Caller->HasName("PP_30_02") 
+		 || Caller->HasName("PP_30_03") || Caller->HasName("PP_30_04") || Caller->HasName("PP_30_06") || Caller->HasName("PP_30_07")
+		 || Caller->HasName("PP_10_10") || Caller->HasName("13_85_01") || Caller->HasName("15_19_01") || Caller->HasName("19_83_01")
+		 || Caller->HasName("19_81_01") || Caller->HasName("15_38_01"))
+		{
+			Caller->Hide();
+			Caller->EnableHeadLights(true);
+		}
+	}
+};
+
+object LIGHTS : CommandScript
+{
+	LIGHTS()
+	{ }
+
+	bool CheckTarget(GameObject *Caller, Actor *Target, int ChildID)
+	{
+		if(!Caller->IsValid() || !Target->IsValid() || Target->GetID() != Caller->GetID() || Caller->GetType() != ACTOR_VEHICLE) return false;
+		 return true;
+		return false;
+	}
+
+	void PushActions(GameObject *Caller, Actor *Target, int childID)
+	{
+		Vehicle v(Caller);	
+		switch(childID)
+		{
+			case 1: // Alle Lichter aus		
+				v.EnableHeadLights(false);
+				v.EnableBlinker(BLT_NONE);
+				if (v.IsBlueLightEnabled()) v.PushActionExecuteCommand(ACTION_APPEND, "VCmdBlue", &v, 0, false);
+				break;	
+			case 2: // Scheinwerfer an			
+				v.EnableHeadLights(true);
+				break;
+		}
+	}
+};
+
+object COMMANDOSPERRE : CommandScript
+{
+	COMMANDOSPERRE()
+	{ }
+
+	bool CheckTarget(GameObject *Caller, Actor *Target, int ChildID)
+	{
+		if(!Caller->IsValid() || !Target->IsValid() || Target->GetID() != Caller->GetID() || Caller->GetType() != ACTOR_VEHICLE) return false;
+		 return true;
+		return false;
+	}
+
+	void PushActions(GameObject *Caller, Actor *Target, int childID)
+	{	
+		switch(childID)
+		{
+			case 0:
+				GameObject obj(Caller);
+				obj.SetCommandable(false);
+				
+				break;	
+			case 1:
+				Caller->SetCommandable(true);
+				break;	
+		}
+	}
+};
+object OpenGate : CommandScript
+{
+	OpenGate()
+	{ }
+
+	bool CheckTarget(GameObject *Caller, Actor *Target, int ChildID)
+	{
+		if(!Caller->IsValid() || !Target->IsValid() || Target->GetID() != Caller->GetID() || Caller->GetType() != ACTOR_VEHICLE) return false;
+		 return true;
+		return false;
+	}
+
+	void PushActions(GameObject *Caller, Actor *Target, int ChildID)
+	{
+		const char *TORTEMP; const char *FAHRZEUGNAME; char TORNAME[255];
+		TORTEMP = "gate";	
+		FAHRZEUGNAME = Caller->GetName();	
+		snprintf(TORNAME, 255, "%s_%s",TORTEMP,FAHRZEUGNAME);
+		GameObjectList gates(TORNAME);
+        for(int i = 0; i < gates.GetNumObjects(); i++)
+		{
+			GameObject * gate = gates.GetObject(i);
+			if (gate)
+			{
+				gate->PushActionSwitchAnim(ACTION_APPEND,"open");
+				gate->SetUserData(1);
+				if(ChildID==42){
+					gate->PushActionWait(ACTION_APPEND,10);
+					gate->PushActionSwitchAnim(ACTION_APPEND,"close");
+				}
+			}
+		}
+	}
+};
+object CloseGateInX :CommandScript
+{
+	CloseGateInX(){}
+	bool CheckTarget(GameObject *Caller, Actor *Target, int ChildID){return true;}
+	void PushActions(GameObject *Caller, Actor *Target, int ChildID)
+	{
+		const char *TORTEMP; const char *FAHRZEUGNAME; char TORNAME[255];
+		TORTEMP = "gate";	
+		FAHRZEUGNAME = Caller->GetName();	
+		snprintf(TORNAME, 255, "%s_%s",TORTEMP,FAHRZEUGNAME);
+		GameObjectList gates(TORNAME);
+        for(int i = 0; i < gates.GetNumObjects(); i++)
+		{
+			GameObject * gate = gates.GetObject(i);
+			if (gate)
+			{
+				gate->PushActionWait(ACTION_APPEND,ChildID);
+				gate->PushActionSwitchAnim(ACTION_APPEND,"close");
+				gate->SetUserData(1);
+			}
+		}
+	}
+};
+
+object CloseGate : CommandScript
+{
+	CloseGate()
+	{ }
+
+	bool CheckTarget(GameObject *Caller, Actor *Target, int ChildID)
+	{
+		if(!Caller->IsValid() || !Target->IsValid() || Target->GetID() != Caller->GetID() || Caller->GetType() != ACTOR_VEHICLE) return false;
+		 return true;
+		return false;
+	}
+
+	void PushActions(GameObject *Caller, Actor *Target, int ChildID)
+	{
+		const char *TORTEMP; const char *FAHRZEUGNAME; char TORNAME[255];
+		TORTEMP = "gate";
+		FAHRZEUGNAME = Target->GetName();	
+		snprintf(TORNAME, 255, "%s_%s",TORTEMP,FAHRZEUGNAME);
+		GameObjectList gates(TORNAME); // Name des Tores bzw. Fahrzeuges
+		for(int i = 0; i < gates.GetNumObjects(); i++)
+		{
+			GameObject * gate = gates.GetObject(i);
+			if (gate)
+			{
+				gate->PushActionSwitchAnim(ACTION_NEWLIST,"close");
+				gate->SetUserData(1);
+			}
+		}
+		//Delete Move To point
+		char target[255];
+		Vehicle v(Target);
+		snprintf(target, 255 , "moveTarget_%i", v.GetID());
+		GameObjectList G = Game::GetGameObjects(target);
+		if (G.GetNumObjects() > 0)
+		{
+			G.GetObject(0)->PushActionDeleteOwner(ACTION_NEWLIST);
+		}
+	}
+};
+
+object OpenGateH : CommandScript
+{
+	OpenGateH()
+	{ }
+
+	bool CheckTarget(GameObject *Caller, Actor *Target, int ChildID)
+	{
+		if(!Caller->IsValid() || !Target->IsValid() || Target->GetID() != Caller->GetID() || Caller->GetType() != ACTOR_VEHICLE) return false;
+		 return true;
+		return false;
+	}
+
+	void PushActions(GameObject *Caller, Actor *Target, int ChildID)
+	{
+		const char *TORTEMP; const char *FAHRZEUGNAME; char TORNAME[255];
+		TORTEMP = "gate";
+		FAHRZEUGNAME = Caller->GetName();	
+		snprintf(TORNAME, 255, "%s_%s_H",TORTEMP,FAHRZEUGNAME);
+		GameObjectList gates(TORNAME); // Name des Tores bzw. Fahrzeuges
+		for(int i = 0; i < gates.GetNumObjects(); i++)
+		{
+			GameObject * gate = gates.GetObject(i);
+			if (gate)
+			{
+				gate->SetAnimation("open");
+				gate->SetUserData(1);
+			}
+		}
+
+	}
+};
+
+object CloseGateH : CommandScript
+{
+	CloseGateH()
+	{ }
+
+	bool CheckTarget(GameObject *Caller, Actor *Target, int ChildID)
+	{
+		if(!Caller->IsValid() || !Target->IsValid() || Target->GetID() != Caller->GetID() || Caller->GetType() != ACTOR_VEHICLE) return false;
+		 return true;
+		return false;
+	}
+
+	void PushActions(GameObject *Caller, Actor *Target, int ChildID)
+	{
+		const char *TORTEMP; const char *FAHRZEUGNAME; char TORNAME[255];
+		TORTEMP = "gate";		
+		FAHRZEUGNAME = Caller->GetName();		
+		snprintf(TORNAME, 255, "%s_%s_H",TORTEMP,FAHRZEUGNAME);
+		GameObjectList gates(TORNAME); // Name des Tores bzw. Fahrzeuges
+		for(int i = 0; i < gates.GetNumObjects(); i++)
+		{
+			GameObject * gate = gates.GetObject(i);
+			if (gate)
+			{
+				gate->SetAnimation("close");
+				gate->SetUserData(1);
+			}
+		}
+		//Delete Move To point
+		char target[255];
+		Vehicle v(Target);
+		snprintf(target, 255 , "moveTarget_%i", v.GetID());
+		GameObjectList G = Game::GetGameObjects(target);
+		if (G.GetNumObjects() > 0)
+		{
+			G.GetObject(0)->PushActionDeleteOwner(ACTION_NEWLIST);
+		}
+	}
+};
+object ActionEmptyPF : CommandScript
+{
+	ActionEmptyPF()
+	{ }
+
+	bool CheckTarget(GameObject *Caller, Actor *Target, int ChildID)
+	{
+		return true;
+	}
+
+	void PushActions(GameObject *Caller, Actor *Target, int ChildID)
+	{
+		Vehicle v(Caller);
+		if (v.HasCommand("AcceptsPersonal1")) v.RemoveCommand("AcceptsPersonal1");
+		if (v.HasCommand("AcceptsPersonal2")) v.RemoveCommand("AcceptsPersonal2");
+		if (v.HasCommand("AcceptsPersonal3")) v.RemoveCommand("AcceptsPersonal3");
+		PersonList crew = v.GetPassengers();
+		for(int i=0; i < crew.GetNumPersons(); i++)
+		{
+			crew.GetPerson(i)->PushActionLeaveCar(ACTION_NEWLIST, Caller);
+			crew.GetPerson(i)->PushActionWait(ACTION_APPEND,0.1f);
+			if (v.HasNamePrefix("01_")){	crew.GetPerson(i)->SetUserData(1);crew.GetPerson(i)->PushActionExecuteCommand(ACTION_APPEND, "FOXAPersonManager", NULL, 20); }
+			else if (v.HasNamePrefix("02_")) {crew.GetPerson(i)->SetUserData(2);crew.GetPerson(i)->PushActionExecuteCommand(ACTION_APPEND, "FOXAPersonManager", NULL, 20);} 
+			else if (v.HasNamePrefix("03_")) {crew.GetPerson(i)->SetUserData(3);crew.GetPerson(i)->PushActionExecuteCommand(ACTION_APPEND, "FOXAPersonManager", NULL, 20);}	 		
+   			else if (v.HasNamePrefix("16_")) {crew.GetPerson(i)->SetUserData(16);crew.GetPerson(i)->PushActionExecuteCommand(ACTION_APPEND, "FOXAPersonManager", NULL, 20);}	 		
+   			else if (v.HasNamePrefix("18_")) {crew.GetPerson(i)->SetUserData(18);crew.GetPerson(i)->PushActionExecuteCommand(ACTION_APPEND, "FOXAPersonManager", NULL, 20);}	 		
+   			else if (v.HasNamePrefix("21_")) {crew.GetPerson(i)->SetUserData(21);crew.GetPerson(i)->PushActionExecuteCommand(ACTION_APPEND, "FOXAPersonManager", NULL, 20);}	 		
+   			else crew.GetPerson(i)->PushActionDeleteOwner(ACTION_APPEND);
+							
+		}	
+		if (v.HasCommand("DUMMY_BIKE")) v.SetChildEnabled("PERSON",false);	
+		PersonList transports = v.GetTransports();
+		for(int i = 0; i < transports.GetNumPersons(); i++)
+		{
+			transports.GetPerson(i)->PushActionLeaveCar(ACTION_NEWLIST, Caller);
+			if(transports.GetPerson(i)->GetRole() == ROLE_GANGSTER)
+			{
+				/*
+				if(transports.GetPerson(i)->HasCommand("Mord")){
+					Game::SetEventFinished(EinsatzID, true, 1);
+					EinsatzID=0;
+				}
+				if(transports.GetPerson(i)->HasCommand("GenRD")){
+					int xyz=Math::atoi(transports.GetPerson(i)->GetName());
+					System::Log("@GenRD end: %i",xyz);
+					Game::SetEventFinished(xyz, true, 1);
+					transports.GetPerson(i)->PushActionExecuteCommand(ACTION_INSERT,"CheckEID",NULL,xyz,false);
+				}
+				*/
+				transports.GetPerson(i)->SetRole(ROLE_CIVILIAN);
+				transports.GetPerson(i)->SetBehaviour(BEHAVIOUR_CIVILIAN_NORMAL);
+			}
+			transports.GetPerson(i)->PushActionWait(ACTION_APPEND, 0.1f);
+			transports.GetPerson(i)->PushActionDeleteOwner(ACTION_APPEND);
+		}
+	}
+};
+
+object SOUND_PLAYER : CommandScript
+{
+	SOUND_PLAYER()
+	{ }
+
+	bool CheckTarget(GameObject *Caller, Actor *Target, int ChildID)
+	{
+		if(!Caller->IsValid() || !Target->IsValid() || Target->GetID() != Caller->GetID() || Caller->GetType() != ACTOR_VEHICLE) return false;
+		 return true;
+		return false;
+	}
+
+	void PushActions(GameObject *Caller, Actor *Target, int childID)
+	{
+		Vehicle v(Caller);
+		switch(childID)
+		{
+			case 0:
+				char DATEIPFAD[255];
+				snprintf(DATEIPFAD,60,"mod:Audio/FX/car sounds/%s_starting.wav", Caller->GetName(), childID);
+				Audio::PlaySample3D(DATEIPFAD, Caller->GetPosition(), false);
+				break;			
+			case 1:
+				Audio::PlaySample3D("mod:Audio/FX/car sounds/pressure.wav", Caller->GetPosition(), false);
+				break;
+			case 2:
+				Audio::PlaySample3D("mod:Audio/FX/car sounds/hydra.wav", Caller->GetPosition(), false);
+				break;		
+			case 3:
+				Audio::PlaySample3D("mod:Audio/FX/car sounds/pkw_starting2.wav", Caller->GetPosition(), false);
+				break;		
+			case 4:
+				Audio::PlaySample3D("mod:Audio/FX/car sounds/rueckw.wav", Caller->GetPosition(), false);
+				break;			
+			case 5:
+				Audio::StopSample(Caller->GetUserData());
+				int PUMPE_SOUND = Audio::PlaySample3D("mod:Audio/FX/car sounds/pumpe.wav",Caller->GetPosition(),true);
+				Caller->SetUserData(PUMPE_SOUND);
+				Caller->AssignCommand("PUMPE_ON"); 
+				break;			
+			case 6:
+				soundlauf=soundlauf%4;
+				soundlauf++;
+				if (soundlauf == 1) int GENERATOR_SOUND = Audio::PlaySample3D("mod:Audio/FX/car sounds/generator_n_1.wav",Caller->GetPosition(),true);
+				else if (soundlauf == 2) int GENERATOR_SOUND = Audio::PlaySample3D("mod:Audio/FX/car sounds/generator_n_2.wav",Caller->GetPosition(),true);
+				else if (soundlauf == 3) int GENERATOR_SOUND = Audio::PlaySample3D("mod:Audio/FX/car sounds/generator_n_3.wav",Caller->GetPosition(),true);
+				else int GENERATOR_SOUND = Audio::PlaySample3D("mod:Audio/FX/car sounds/generator_n_4.wav",Caller->GetPosition(),true);
+
+				Caller->SetUserData(GENERATOR_SOUND);
+				Caller->AssignCommand("GENERATOR_ON"); 
+				break;		
+			case 7:
+				Audio::PlaySample3D("mod:Audio/FX/car sounds/Alarmstufe.wav", Caller->GetPosition(), false);
+				break;			
+		}
+	}
+};
+
+object Alarmstufe : CommandScript
+{
+	Alarmstufe()
+	{
+		SetIcon("Alarmstufe");
+		SetCursor("Alarmstufe");
+		SetValidTargets(ACTOR_VEHICLE);
+		SetRestrictions(RESTRICT_SELFEXECUTE);
+	}
+
+	bool CheckPossible(GameObject *Caller)
+	{
+		if (!Caller->HasCommand("ALARM_DUMMY")) return false;	
+		if (Mission::GetCounter("Burning Houses") > 5 || Mission::GetCounter("Burning Objects") > 30 || Mission::GetCounter("Injured Civils") > 7 || Mission::GetCounter("Injured Squads") > 4 || Mission::GetCounter("Dead Squads") > 2 || Mission::GetCounter("Contaminated Persons") > 1) return true;	
+		return false;
+	}
+
+	bool CheckTarget(GameObject *Caller, Actor *Target, int childID)
+	{
+		return true;
+	}
+
+	void PushActions(GameObject *Caller, Actor *Target, int childID)
+	{		
+
+	}
+};
+
+
+object OHNE_WT : CommandScript
+{
+	OHNE_WT()
+	{
+		SetIcon("OHNE_WT");
+		SetCursor("OHNE_WT");
+ 		SetGroupID(DummyGroup_b);
+ 		SetGroupLeader(true);
+		SetRestrictions(RESTRICT_SELFEXECUTE);
+	}
+
+ 	bool CheckPossible(GameObject *Caller)
+ 	{
+ 		if (!Caller->IsValid()) return false;
+ 		if (Caller->GetType() == ACTOR_VEHICLE) return true; 
+ 		return false;
+ 	}
+ 
+ 	bool CheckTarget(GameObject *Caller, Actor *Target, int childID)
+ 	{
+ 		if (!Caller->IsValid() || !Target->IsValid() || Target->GetID() != Caller->GetID()) return false;
+ 		if (Caller->GetType() == ACTOR_VEHICLE) return true; 
+ 		return true;
+ 	}
+
+	void PushActions(GameObject *Caller, Actor *Target, int childID)
+	{
+		Caller->RemoveCommand("OHNE_WT");
+		Caller->AssignCommand("MIT_WT");
+	}
+};
+
+object MIT_WT : CommandScript
+{
+	MIT_WT()
+	{
+		SetIcon("MIT_WT");
+		SetCursor("MIT_WT");
+ 		SetGroupID(DummyGroup_b);
+ 		SetGroupLeader(true);
+		SetRestrictions(RESTRICT_SELFEXECUTE);
+	}
+
+ 	bool CheckPossible(GameObject *Caller)
+ 	{
+ 		if (!Caller->IsValid()) return false;
+ 		if (Caller->GetType() == ACTOR_VEHICLE) return true;
+ 		return false;
+ 	}
+ 
+ 	bool CheckTarget(GameObject *Caller, Actor *Target, int childID)
+ 	{
+ 		if (!Caller->IsValid() || !Target->IsValid() || Target->GetID() != Caller->GetID()) return false;
+ 		if (Caller->GetType() == ACTOR_VEHICLE) return true;
+ 		return true;
+ 	}
+
+	void PushActions(GameObject *Caller, Actor *Target, int childID)
+	{
+		Caller->RemoveCommand("MIT_WT");
+		Caller->AssignCommand("OHNE_WT");
+	}
+};
+
+object OHNE_NA : CommandScript
+{
+	OHNE_NA()
+	{
+		SetIcon("OHNE_NA");
+		SetCursor("OHNE_NA");
+ 		SetGroupID(DummyGroup_b);
+ 		SetGroupLeader(true);
+		SetRestrictions(RESTRICT_SELFEXECUTE);
+	}
+
+ 	bool CheckPossible(GameObject *Caller)
+ 	{
+ 		if (!Caller->IsValid()) return false;
+ 		if (Caller->GetType() == ACTOR_VEHICLE) return true;
+ 		return false;
+ 	}
+ 
+ 	bool CheckTarget(GameObject *Caller, Actor *Target, int childID)
+ 	{
+ 		if (!Caller->IsValid() || !Target->IsValid() || Target->GetID() != Caller->GetID()) return false;
+ 		if (Caller->GetType() == ACTOR_VEHICLE) return true; 
+ 		return true;
+ 	}
+
+	void PushActions(GameObject *Caller, Actor *Target, int childID)
+	{
+		Caller->RemoveCommand("OHNE_NA");
+		Caller->AssignCommand("MIT_NA");
+	}
+};
+
+object MIT_NA : CommandScript
+{
+	MIT_NA()
+	{
+		SetIcon("MIT_NA");
+		SetCursor("MIT_NA");
+ 		SetGroupID(DummyGroup_b);
+ 		SetGroupLeader(true);
+		SetRestrictions(RESTRICT_SELFEXECUTE);
+	}
+
+ 	bool CheckPossible(GameObject *Caller)
+ 	{
+ 		if (!Caller->IsValid()) return false;
+ 		if (Caller->GetType() == ACTOR_VEHICLE) return true;
+ 		return false;
+ 	}
+ 
+ 	bool CheckTarget(GameObject *Caller, Actor *Target, int childID)
+ 	{
+ 		if (!Caller->IsValid() || !Target->IsValid() || Target->GetID() != Caller->GetID()) return false;
+ 		if (Caller->GetType() == ACTOR_VEHICLE) return true;
+ 		return true;
+ 	}
+
+	void PushActions(GameObject *Caller, Actor *Target, int childID)
+	{
+		Caller->RemoveCommand("MIT_NA");
+		Caller->AssignCommand("OHNE_NA");
+	}
+};
+
+object P01 : CommandScript
+{
+	P01()
+	{
+		SetIcon("P_01");
+		SetCursor("P_01");
+ 		SetGroupID(DummyGroup_b);
+ 		SetGroupLeader(true);
+		SetRestrictions(RESTRICT_SELFEXECUTE);
+	}
+
+ 	bool CheckPossible(GameObject *Caller)
+ 	{
+ 		if (!Caller->IsValid()) return false;
+ 		if (Caller->GetType() == ACTOR_VEHICLE) return true;
+		return false;
+ 	}
+ 
+ 	bool CheckTarget(GameObject *Caller, Actor *Target, int childID)
+ 	{
+ 		if (!Caller->IsValid() || !Target->IsValid() || Target->GetID() != Caller->GetID()) return false;
+ 		if (Caller->GetType() == ACTOR_VEHICLE) return true;
+ 		return true;
+ 	}
+
+	void PushActions(GameObject *Caller, Actor *Target, int childID)
+	{
+		Caller->RemoveCommand("P01");
+		Caller->AssignCommand("P02");
+	}
+};
+
+object P02 : CommandScript
+{
+	P02()
+	{
+		SetIcon("P_02");
+		SetCursor("P_02");
+ 		SetGroupID(DummyGroup_b);
+ 		SetGroupLeader(true);
+		SetRestrictions(RESTRICT_SELFEXECUTE);
+	}
+
+ 	bool CheckPossible(GameObject *Caller)
+ 	{
+ 		if (!Caller->IsValid()) return false;
+ 		if (Caller->GetType() == ACTOR_VEHICLE) return true;
+		return false;
+ 	}
+ 
+ 	bool CheckTarget(GameObject *Caller, Actor *Target, int childID)
+ 	{
+ 		if (!Caller->IsValid() || !Target->IsValid() || Target->GetID() != Caller->GetID()) return false;
+ 		if (Caller->GetType() == ACTOR_VEHICLE) return true;
+ 		return true;
+ 	}
+
+	void PushActions(GameObject *Caller, Actor *Target, int childID)
+	{
+		Caller->RemoveCommand("P02");
+		Caller->AssignCommand("P01");
+	}
+};
+
+
+object P03 : CommandScript
+{
+	P03()
+	{
+		SetIcon("P_03");
+		SetCursor("P_03");
+ 		SetGroupID(DummyGroup_b);
+ 		SetGroupLeader(true);
+		SetRestrictions(RESTRICT_SELFEXECUTE);
+	}
+
+ 	bool CheckPossible(GameObject *Caller)
+ 	{
+ 		if (!Caller->IsValid()) return false;
+ 		if (Caller->GetType() == ACTOR_VEHICLE) return true;
+		return false;
+ 	}
+ 
+ 	bool CheckTarget(GameObject *Caller, Actor *Target, int childID)
+ 	{
+ 		if (!Caller->IsValid() || !Target->IsValid() || Target->GetID() != Caller->GetID()) return false;
+ 		if (Caller->GetType() == ACTOR_VEHICLE) return true;
+ 		return true;
+ 	}
+
+	void PushActions(GameObject *Caller, Actor *Target, int childID)
+	{
+		Caller->RemoveCommand("P03");
+		Caller->AssignCommand("P01");
+	}
+};
+object B01 : CommandScript
+{
+	B01()
+	{
+		SetIcon("B_01");
+		SetCursor("B_01");
+ 		SetGroupID(DummyGroup_b);
+ 		SetGroupLeader(true);
+		SetRestrictions(RESTRICT_SELFEXECUTE);
+	}
+
+ 	bool CheckPossible(GameObject *Caller)
+ 	{
+ 		if (!Caller->IsValid())  return false;
+ 		if (Caller->GetType() == ACTOR_VEHICLE) return true;
+ 		return false;
+ 	}
+ 
+ 	bool CheckTarget(GameObject *Caller, Actor *Target, int childID)
+ 	{
+ 		if (!Caller->IsValid() || !Target->IsValid() || Target->GetID() != Caller->GetID()) return false;
+ 		if (Caller->GetType() == ACTOR_VEHICLE) return true;
+ 		return true;
+ 	}
+
+	void PushActions(GameObject *Caller, Actor *Target, int childID)
+	{
+		Caller->RemoveCommand("B01");
+		Caller->AssignCommand("B02");
+	}
+};
+
+object B02 : CommandScript
+{
+	B02()
+	{
+		SetIcon("B_02");
+		SetCursor("B_02");
+ 		SetGroupID(DummyGroup_b);
+ 		SetGroupLeader(true);
+		SetRestrictions(RESTRICT_SELFEXECUTE);
+	}
+
+ 	bool CheckPossible(GameObject *Caller)
+ 	{
+ 		if (!Caller->IsValid()) return false; 
+ 		if (Caller->GetType() == ACTOR_VEHICLE) return true;
+ 		return false;
+ 	}
+ 
+ 	bool CheckTarget(GameObject *Caller, Actor *Target, int childID)
+ 	{
+ 		if (!Caller->IsValid() || !Target->IsValid() || Target->GetID() != Caller->GetID()) return false;
+ 		if (Caller->GetType() == ACTOR_VEHICLE) return true;
+ 		return true;
+ 	}
+
+	void PushActions(GameObject *Caller, Actor *Target, int childID)
+	{
+		Caller->RemoveCommand("B02");
+		Caller->AssignCommand("B03");
+	}
+};
+
+object B03 : CommandScript
+{
+	B03()
+	{
+		SetIcon("B_03");
+		SetCursor("B_03");
+ 		SetGroupID(DummyGroup_b);
+ 		SetGroupLeader(true);
+		SetRestrictions(RESTRICT_SELFEXECUTE);
+	}
+
+ 	bool CheckPossible(GameObject *Caller)
+ 	{
+ 		if (!Caller->IsValid()) return false;
+ 		if (Caller->GetType() == ACTOR_VEHICLE) return true; 
+ 		return false;
+ 	}
+ 
+ 	bool CheckTarget(GameObject *Caller, Actor *Target, int childID)
+ 	{
+ 		if (!Caller->IsValid() || !Target->IsValid() || Target->GetID() != Caller->GetID()) return false;
+ 		if (Caller->GetType() == ACTOR_VEHICLE) return true;
+ 		return true;
+ 	}
+
+	void PushActions(GameObject *Caller, Actor *Target, int childID)
+	{
+		Caller->RemoveCommand("B03");
+		Caller->AssignCommand("B01");
+	}
+};
+
+
+
+

@@ -1,0 +1,2480 @@
+//
+//	Based on the Bieberfelde.script from BFEMP
+//  Heavily adapted and split in multiple scripts for FUBMP
+//
+
+
+//VCmdAlarm
+	bool FW_ALARMSTUFE = false; bool deinstall; 
+	bool RD_ALARMSTUFE = false;
+	Vector eingang; Vector wache; Vector wendep; Vector richtung; Vector parkpos;
+	char AlarmString[7]; char FireResistance[3];
+	int ZUFALL;
+	Person p; Actor eing; Actor fz;
+	int DummyGroup_b = 300;
+	bool CheckTag=true;
+// FOX Alarm variables
+	const int TAGB = 12; // 7
+	const int NACHTB = 8; // 5
+	const int ALARMB = 6;
+	const int RKB = 4;
+	int RKO = 0;
+	int OUTB = 0;
+	const int Fahrzeuge = 86; // Always one more as 0 is not used // Keep in Sync with FOXPersonal.script
+// Alarm Selection Array - Order by MP Player ID
+	int AlarmSelect[5][Fahrzeuge];
+// Alarm Management Array 0-NOTInit 1-ReadyForCall 2-InStation 3-OUT 4+-AlarmByOrder
+	int Alarm[Fahrzeuge];
+	//
+	const int AlarmCircles = 6;
+	// Manage Alarmed Vehicles Order:
+	int AlarmNumbers[AlarmCircles];
+	AlarmNumbers[0] = 1;
+	AlarmNumbers[1] = 2;
+	AlarmNumbers[2] = 3;
+	AlarmNumbers[3] = 16;
+	AlarmNumbers[4] = 18;
+	AlarmNumbers[5] = 21;
+	//
+int MakerArray[4];
+
+const int arleng=128;
+class Xmlutil: CommandScript
+{
+	bool Tag()
+	{
+		int h,m,s;
+		Game::GetTime(h,m,s);
+		if (h > 17 ||  h < 8)
+		{
+			return false;
+		}
+		return true;
+	}
+	int GetIntegerArgfor(char * nam,char * sub){
+		char anz[arleng];
+		char ref[arleng];
+		snprintf(ref,arleng,"%s%s",nam,sub);
+		Game::GetGameString(ref,anz,arleng);
+		if(StrCompare(ref,anz)==0)return 0;
+		return Math::atoi(anz);
+	}
+	Vehicle GetRandomCar(char * nam){
+		char anz2[arleng];
+		char ref2[arleng];
+		int index=Math::rand()%GetIntegerArgfor("Protovec","");
+		snprintf(ref2,arleng,"Protovec%i",index);
+		Game::GetGameString(ref2,anz2,arleng);
+		return Game::CreateVehicle(anz2,nam);
+	}
+	Person GetRandomPer(char * nam){
+		char anz2[arleng];
+		char ref2[arleng];
+		int index=Math::rand()%GetIntegerArgfor("Protoper","");
+		snprintf(ref2,arleng,"Protoper%i",index);
+		Game::GetGameString(ref2,anz2,arleng);
+		return Game::CreatePerson(anz2,nam);
+	}
+	void Alarmext(Vehicle v,Vector TargetPos,float wait,float anfahrt,int sound=0){
+		v.EnableBlinker(BLT_NONE);
+		v.EnableHeadLights(true);
+		v.PushActionExecuteCommand(ACTION_APPEND, "FMS", &v, 10, false);	
+		if (v.IsBlueLightEnabled()) v.PushActionExecuteCommand(ACTION_APPEND, "VCmdBlue", &v, 0, false);
+		v.PushActionWait(ACTION_APPEND,wait);
+		v.PushActionExecuteCommand(ACTION_APPEND, "FMS", &v, 3, false);	
+		v.PushActionWait(ACTION_APPEND,anfahrt);
+		v.PushActionShowHide(ACTION_APPEND, false);
+		v.PushActionExecuteCommand(ACTION_APPEND, "FOXUnstuck"); // Unstuck if spawned in something else
+		v.PushActionExecuteCommand(ACTION_APPEND, "VCmdBlue", &v, 0, false);
+		if(!v.HasNamePrefix("13_85_01"))v.PushActionExecuteCommand(ACTION_APPEND, "VCmdSiren", &v, 0, false);
+		GameObject SoundDummy =  Game::CreateObject("mod:Prototypes/Objects/Misc/empty.e4p", "alarmSound_X");	
+		SoundDummy.PushActionExecuteCommand(ACTION_NEWLIST, "AlarmSoundFirst", &SoundDummy, sound, false);
+		Game::FindFreePosition(&v, TargetPos, 100);
+		//v.PushActionExecuteCommand(ACTION_APPEND,"SOUND_PLAYER",&v,0,true);
+		v.PushActionWait(ACTION_APPEND, 0.1f);
+		v.PushActionExecuteCommand(ACTION_APPEND,"LIGHTS",&v,2,true);
+		v.AssignCommand("ALARM_DUMMY");	
+		//v.PushActionExecuteCommand(ACTION_APPEND, "FMS", &v, 3, false);	
+		v.PushActionExecuteCommand(ACTION_APPEND,"COMMANDOSPERRE",&v,1,true);
+		AlarmHelper::AutobahnFahrtCheck(&v, TargetPos);
+		v.PushActionMove(ACTION_APPEND, TargetPos);
+		v.PushActionWait(ACTION_APPEND, 0.1f);
+	}
+	void DreheUm(GameObject obj1,GameObject obj2,float winkel){
+		float r[9];
+		float childr[9];
+		obj2.GetRotation(r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7], r[8]);
+		Math::EulerToMatrix(winkel, 0.f, 0.f, childr);
+		Math::MultiplyMatrices(childr, r);
+		obj1.SetRotation(childr[0], childr[1], childr[2], childr[3], childr[4], childr[5], childr[6], childr[7], childr[8]);
+	}
+	Person CreateSquad(int i,char * name){
+		char anz2[arleng];
+		char ref2[arleng];
+		snprintf(ref2,arleng,"%s%i","Squad",i);
+		//System::Log(ref2);
+		Game::GetGameString(ref2,anz2,arleng);
+		//System::Log(anz2);
+		return Game::CreatePerson(anz2,name);
+	}
+	void MoveTo(Vehicle v,GameObject obj){
+			if (!v.HasCommand("DummyHasSiren") && v.HasCommand("VcmdAutoSirenOff") && !Input::RCtrlPressed())
+			{
+				Vector tPos = obj.GetPosition();
+				Vector pos = v.GetPosition();
+				float CurrentDist = Math::dist(tPos.x, tPos.y, tPos.z, pos.x, pos.y, pos.z);
+				if (CurrentDist > 1200)
+				{
+					v.SetSpeed(11.f);
+					v.PushActionExecuteCommand(ACTION_APPEND,"VcmdSiren", &v);
+				}
+				else
+					v.SetSpeed(4.f);
+			}
+			else if (v.IsBlueLightEnabled() && (Input::RCtrlPressed()))
+				v.PushActionExecuteCommand(ACTION_APPEND, "VCmdBlue", &v, 0, false);
+			v.PushActionMove(ACTION_APPEND,obj.GetPosition());
+	}
+	void  GetVehByInt(char* outStr, int n)
+	{
+		char vehicle[12];
+		char target[8];
+		snprintf(target, 8, "%i_int",n);
+		Game::GetGameString(target, vehicle, 12);
+		for (int i =0; i < 12; i++)
+		{
+			outStr[i]=vehicle[i];
+		}
+	}
+	int GetIntByVeh(char*vehicle)
+	{
+		char target[16];
+		char number[3];
+		snprintf(target, 16, "%s_int", vehicle);
+		Game::GetGameString(target, number, 3);
+		int vehicleNumber = Math::atoi(number);
+		return vehicleNumber;
+	}
+};
+
+
+
+// GOTOVcmdAlarm
+class AlarmHelper : CommandScript
+{
+	void VCmdAlarm()
+	{
+		SetIcon("alarm");
+		SetCursor("alarm");
+		//SetValidTargets(ACTOR_VEHICLE);
+		//SetRestrictions(RESTRICT_SELFEXECUTE);
+		SetPossibleCallers(ACTOR_VEHICLE);
+		SetGroupID(26);
+		SetPriority(201);
+	}
+	bool CheckGroupVisibility(GameObject *Caller)
+	{	
+		return true;
+	}
+	bool CheckEnoughPersonal(GameObject *Caller)
+	{
+		Vehicle v(Caller);
+		if (v.HasNamePrefix("10_"))
+		{
+			int MANN = 0;
+			if (!Tag()) MANN = NACHTB-OUTB+(FW_ALARMSTUFE?ALARMB:0);
+			else MANN = TAGB-OUTB+(FW_ALARMSTUFE?ALARMB:0);
+			int personal = 1;
+			if (v.HasCommand("MIT2") || v.HasName("10_33_01") || v.HasName("10_65_01")) personal =2;
+			else if (v.HasCommand("MIT4")) personal =4;
+			else if (v.HasCommand("MIT6")) personal =6;
+			else if (v.HasCommand("MIT9")) personal =9;
+			if (MANN-personal<0) return false;
+		}
+		else if (v.HasName("11_83_01") || v.HasName("11_83_02") || v.HasName("11_87_01"))
+		{
+			int personal = RKB-RKO;
+			if (personal < 2 && !RD_ALARMSTUFE) return false;
+		}
+		return true;
+	}
+	bool CheckPossible(GameObject *Caller)
+	{
+		if(!Caller->IsValid())
+			return false;
+		if(Caller->GetType()==ACTOR_VEHICLE)
+		{
+			Vehicle v(Caller);
+			if(v.IsDecontaminating()) return false;
+			if (v.HasCommand("ALARM_DUMMY")) return false;
+			if (v.IsInstalled())
+			{
+				if(v.GetVehicleType() == VT_THW_FGRR_BKF && (!v.IsReady() || v.GetCarriedObjects().GetNumObjects()>0)) return false;
+				if(v.GetVehicleType() == VT_FIREFIGHTERS_DLK && (v.IsUplifting() || v.IsInstalled() || v.IsUplifted())) return false;
+				if(v.GetVehicleType() == VT_FIREFIGHTERS_GTF) return false;
+			}
+			// Hauptamt Personal Check
+			if (v.HasNamePrefix("10_") || v.HasNamePrefix("11_"))
+			{
+				if (!CheckEnoughPersonal(Caller) && !v.HasName("10_65_01")) return false;
+			}
+			if(v.HasNamePrefix("11_83_03")) {return Xmlutil::Tag() || RD_ALARMSTUFE;}
+			else if(v.HasNamePrefix("17_82_01")) {return Xmlutil::Tag() || RD_ALARMSTUFE;}
+			else if(v.HasNamePrefix("12_83_02")) {return Xmlutil::Tag() || RD_ALARMSTUFE;}
+			else if(v.HasNamePrefix("11_85_01")||v.HasNamePrefix("12_85_01")||v.HasNamePrefix("13_85_01")) {return Xmlutil::Tag() || RD_ALARMSTUFE;}
+			else if(v.HasNamePrefix("14_85_01")) {return !Xmlutil::Tag() || RD_ALARMSTUFE;}
+			else if (v.HasName("40_84_03")) return Xmlutil::Tag(); // SAR 160
+			else if (v.HasName("40_84_04")) return Xmlutil::Tag(); // BMI 250
+		} 
+		return true;
+	}
+	bool CheckTarget(GameObject *Caller, Actor *Target, int childID)
+	{
+		if(!Caller->IsValid() //|| !Target->IsValid() || Target->GetID() != Caller->GetID()
+			) return false;		
+		Vehicle v(Caller);	
+		deinstall = false;
+		SetPriority(0);
+		if (v.HasCommand("ALARM_DUMMY")) return false;
+		if(Target->GetType()==ACTOR_FLOOR||Target->GetType()==ACTOR_STREET){SetPriority(1000);return true;}
+		MoveResult mr = Commands::CheckMoveConditions(Caller, Target, childID);
+		if((v.GetVehicleType() == VT_AMBULANCE_RTW || v.GetVehicleType() == VT_AMBULANCE_ITW || v.GetVehicleType() == VT_AMBULANCE_RHC) && v.GetNumTransported() > 0)
+			SetPriority(105);
+		if(v.IsInstalled())
+		{
+			if(v.GetVehicleType() == VT_THW_FGRR_BKF && (!v.IsReady() || v.GetCarriedObjects().GetNumObjects()>0)) return false;
+			if(v.GetVehicleType() == VT_FIREFIGHTERS_DLK && (v.IsUplifting() || v.IsInstalled() || v.IsUplifted())) return false;
+			if(v.GetVehicleType() == VT_FIREFIGHTERS_GTF) return false;
+			deinstall = true;
+		} if (v.IsDecontaminating()) return false;
+		if (Caller->GetID()==Target->GetID()) return true;
+		if (mr.Mode != MOVE_ABORT) 
+		{
+			SetPriority(1000);
+			return true;
+		}
+		if (Target->GetType() == ACTOR_VEHICLE)
+		{
+			Vehicle container(Target);
+			if (!container.IsValid()) return false;
+			if (v.HasCommand("VCmdWLFLoadup") && !(StrCompare(container.GetPrototypeFileName(), "mod:Prototypes/Vehicles/__ Feuerwehr/AB_MN_01.e4p")
+			&&StrCompare(container.GetPrototypeFileName(), "mod:Prototypes/Vehicles/__ Feuerwehr/AB_AS_01.e4p")
+			&&StrCompare(container.GetPrototypeFileName(), "mod:Prototypes/Vehicles/__ Feuerwehr/AB_MU_01.e4p")
+			&&StrCompare(container.GetPrototypeFileName(), "mod:Prototypes/Vehicles/__ Feuerwehr/AB_DE_01.e4p")
+			&&StrCompare(container.GetPrototypeFileName(), "mod:Prototypes/Vehicles/__ Feuerwehr/AB_R_01.e4p")
+			&&StrCompare(container.GetPrototypeFileName(), "mod:Prototypes/Vehicles/__ Feuerwehr/AB_W_01.e4p")))
+			return true;
+		}
+		return false;
+	}
+	void AddVehicleToAlarmChain(GameObject *Caller)
+	{
+		if (Caller->HasNamePrefix("01") || Caller->HasNamePrefix("02") || Caller->HasNamePrefix("03") || Caller->HasNamePrefix("16") || Caller->HasNamePrefix("18") || Caller->HasNamePrefix("21") || (Caller->HasName("10_65_01")&&!CheckEnoughPersonal(Caller)))
+		{
+			int maximum = 0;
+			for (int k = 0; k < Fahrzeuge; k++)
+			{
+				if (Alarm[k] > maximum)
+				{
+					maximum = Alarm[k];
+				}
+			}
+			if (maximum < 3) maximum = 3;
+			Alarm[Xmlutil::GetIntByVeh(Caller->GetName())] = maximum+1;
+			if (Caller->HasName("10_65_01")) Caller->AssignCommand("OutVol");
+		}
+		else
+		{
+			// Verzögerung Hauptamt
+			Caller->PushActionWait(ACTION_APPEND, 1.0f);
+			if (!Caller->HasNamePrefix("PP") && !Caller->HasNamePrefix("10")) Caller->PushActionWait(ACTION_APPEND, 3.0f);
+			Alarm[Xmlutil::GetIntByVeh(Caller->GetName())]=3;
+			// Take Personl
+			TakeVehicleFromPool(Caller);
+		}
+	}
+	bool Torcheck(GameObject* Caller)
+	{
+		if (Caller->HasName("10_65_01") || Caller->HasName("10_46_01") || Caller->HasName("01_46_01") || Caller->HasName("01_74_01")  || Caller->HasName("02_44_01") || Caller->HasName("01_56_01")
+				|| Caller->HasName("02_65_01") || Caller->HasName("03_43_01") || Caller->HasName("03_24_01") || Caller->HasName("03_91_01") || Caller->HasName("04_43_01") || Caller->HasName("01_56_01")
+				|| Caller->HasName("04_24_01") || Caller->HasName("30_25_01") || Caller->HasName("04_74_01") || Caller->HasName("21_22_51") || Caller->HasName("21_38_54") || Caller->HasNamePrefix("PP_30") || Caller->HasNamePrefix("19_81"))
+		{
+			return true;
+		}
+		return false;
+	}
+	bool InsideBurg(Vector goal)
+	{
+		ActorList bu = Game::GetActors("FOXP_Burg");
+		if (bu.GetNumActors() > 0)
+		{
+			if (bu.GetActor(0)->IsInsideVirtualObject(goal))
+			{
+				Mission::PlayHint("FHint_13");
+				return true;
+			}
+		}
+		return false;
+	}
+	void AutobahnFahrtCheck(Vehicle * v, Vector Pos)
+	{
+		for (int k = 1; k <= 2; k++)
+		{
+			char AutobahnName[64];
+			snprintf(AutobahnName, 64, "AUTOBAHN_%i", k);
+			ActorList vo = Game::GetActors(AutobahnName);
+			if(vo.GetNumActors() > 0)
+			{
+				if (vo.GetActor(0)->IsInsideVirtualObject(Pos))
+				{
+					char VOName[64];
+					snprintf(VOName, 64, "B10_Entry_%i", k);
+					ActorList vot = Game::GetActors(VOName);
+					if(vot.GetNumActors() > 0)
+					{	
+						v->PushActionMove(ACTION_APPEND, vot.GetActor(0)->GetPosition());
+					}
+				}
+			}
+		}
+	}
+	void AltstadtCheck(GameObject * Caller, Vector goal)
+	{
+		ActorList vo = Game::GetActors("FOXP_Altstadt");
+		Vector start = Caller->GetPosition();
+		ActorList vo2 = Game::GetActors("FOXP_NordOst");
+		//System::Log("FOXMoveCheck");
+		if (vo.GetNumActors() > 0)
+		{
+			if (vo.GetActor(0)->IsInsideVirtualObject(start) && !vo.GetActor(0)->IsInsideVirtualObject(goal))
+			{
+				GameObjectList GO("FOXP_A_EXIT");
+				if (GO.GetNumObjects() > 0)
+				{
+					Caller->PushActionExecuteCommand(ACTION_APPEND, "FoxGenUtils", Caller, 0);
+					Caller->PushActionMove(ACTION_APPEND, GO.GetObject(0)->GetPosition(), true);
+					////Mission::PlayHint("FHint_12");
+				}
+				if (vo2.GetNumActors() > 0)
+				{
+					if (vo2.GetActor(0)->IsInsideVirtualObject(goal))
+					{
+						GameObjectList GO2("FOXP_A_OUTERA");
+						if (GO2.GetNumObjects() > 0)
+						{
+							Caller->PushActionMove(ACTION_APPEND, GO2.GetObject(0)->GetPosition(), true);
+						}
+					}
+				}
+			}
+			if (!vo.GetActor(0)->IsInsideVirtualObject(start) && vo.GetActor(0)->IsInsideVirtualObject(goal))
+			{
+				Caller->PushActionExecuteCommand(ACTION_APPEND, "FoxGenUtils", Caller, 0);
+				if (vo2.GetNumActors() > 0)
+				{
+					if (vo2.GetActor(0)->IsInsideVirtualObject(start))
+					{
+						GameObjectList GO2("FOXP_A_OUTERB");
+						if (GO2.GetNumObjects() > 0)
+						{
+							Caller->PushActionMove(ACTION_APPEND, GO2.GetObject(0)->GetPosition(), true);
+						}
+					}
+				}
+				GameObjectList GO("FOXP_A_ENTRY");
+				if (GO.GetNumObjects() > 0)
+				{
+					Caller->PushActionMove(ACTION_APPEND, GO.GetObject(0)->GetPosition(), true);
+					////Mission::PlayHint("FHint_12");
+				}	
+			}
+		}
+	}
+	void PushActions(GameObject *Caller, Actor *Target, int childID, bool ForcePA = false, bool orientate = false, int delay = 0, int WaitFor = -1)
+	{	
+		MoveResult mr = Commands::CheckMoveConditions(Caller, Target, childID);
+		Vector TPOS = Game::GetCommandPos();
+		if (mr.Mode != MOVE_ABORT) TPOS = mr.Target;
+		Vehicle v(Caller); int Max; int Min; int h,m,s;
+		ActorList al; Actor parkplatz; PersonList pl;	
+		Game::GetTime(h,m,s);
+		bool earlyreturn = false;bool 
+		TorC = Torcheck(Caller) && InsideBurg(TPOS);
+		if (TorC) Mission::PlayHint("FHint_13");
+		if((Caller->HasCommand("ALARM_DUMMY")) || !CheckPossible(Caller)){
+			if (v.HasCommand("FOXFreeToCall") && CanCallFromMove(v))
+			{
+				if (!InStationVo(v))
+				{
+					if (v.HasObjectPath(NULL))
+					{
+						Game::ExecuteCommand("DummyPatrol", &v, &v);
+						v.RemoveObjectPath();
+					}
+					v.SetCommandable(true);
+					v.PushActionExecuteCommand(ACTION_NEWLIST, "FOXFreeToCall", &v, 1);
+					v.PushActionWait(ACTION_APPEND, 2.0f + delay);
+					v.PushActionExecuteCommand(ACTION_APPEND, "FMS", &v, 3, false);
+					v.PushActionExecuteCommand(ACTION_APPEND, "VCmdBlue", &v, 0, false);
+					if((v.HasCommand("OHNE_PA") || ForcePA && v.HasCommand("MIT_PA"))) v.PushActionExecuteCommand(ACTION_APPEND, "Pcmd_AGT", Caller, 0, false);
+					if (!v.HasCommand("DummyHasSiren") && v.HasCommand("VcmdAutoSirenOff") && !Input::RCtrlPressed())
+					{
+						v.PushActionExecuteCommand(ACTION_APPEND,"VcmdSiren", &v);
+					}
+					if (Torcheck(Caller))
+						AltstadtCheck(Caller, TPOS);
+					if (!TorC) v.PushActionMove(ACTION_APPEND, TPOS);
+					v.PushActionExecuteCommand(ACTION_APPEND, "FMS", &v, 4, false);
+					earlyreturn = true;
+				}
+				else ReturnVehicleToPool(Caller);
+			}
+			else earlyreturn = true;
+		}
+		if (orientate && v.HasCommand("FahrzeugPosition") && (!Target->HasNamePrefix("AB") ))
+		{
+			Vector TargetPos = TPOS;
+			int id;
+			if(Caller->GetType()==ACTOR_VEHICLE)id=Caller->GetID();
+			else id=VehicleList(Caller->GetName()).GetVehicle(0)->GetID();
+			char makerName[20];
+			snprintf(makerName, 20, "maker_%i", id);
+			System::Log("~Maker Created");
+			System::Log(makerName);
+			GameObjectList ol1 = Game::GetGameObjects(makerName);
+			if(ol1.GetNumObjects() > 0)
+			{
+				ol1.GetObject(0)->PushActionDeleteOwner(ACTION_NEWLIST);
+			}
+			Vehicle maker = Game::CreateVehicle("mod:Prototypes/Vehicles/__ Feuerwehr/pos_maker.e4p", makerName);
+			maker.SetPosition(TargetPos);
+			maker.SetPlayerMP(Caller->GetPlayerMP());
+			maker.PushActionShowHide(ACTION_NEWLIST, false);
+			maker.AssignCommand("TurnTo");
+			maker.AssignCommand("makerHalt");
+			maker.SetCommandable(true);
+			maker.SetUserData(id);
+			MakerArray[Game::IsMultiplayer()?maker.GetPlayerMP():0] = maker.GetID();
+			if (earlyreturn) v.PushActionExecuteCommand(ACTION_APPEND, "command_frei", &v, 1, false);
+		}
+		if (earlyreturn) return;
+		if (v.HasCommand("FOXFreeToCall"))
+			v.RemoveCommand("FOXFreeToCall");
+		v.PushActionExecuteCommand(ACTION_NEWLIST,"COMMANDOSPERRE",Caller,0,true);
+		PersonList crew = v.GetPassengers();
+		for(int i=0; i < crew.GetNumPersons(); i++)
+		{
+			crew.GetPerson(i)->PushActionLeaveCar(ACTION_NEWLIST, Caller);
+			crew.GetPerson(i)->PushActionWait(ACTION_APPEND,0.1f);
+			crew.GetPerson(i)->PushActionDeleteOwner(ACTION_APPEND);		
+		}	
+		
+		// Helicopters
+		if (v.HasNamePrefix("40_"))
+		{
+			bool alarm = true;
+			if ((h > 19 || h < 6) && (v.HasName("40_84_03") ||  v.HasName("40_84_04")))
+			{
+				Mission::PlayHint("BHint_33");
+				alarm = false;
+			}
+			if(Weather::IsFlashing() && !v.HasName("40_84_02") && !v.HasName("40_20_01"))
+			{
+				Mission::PlayHint("BHint_34");
+				alarm = false;
+			}
+			if (alarm)
+			{
+				if (!v.HasNamePrefix("40_20_01"))
+				{
+					if (Game::IsMultiplayer()) ScriptInterface::ShowMessageTickerTextForAll("BHint_35");
+					else Mission::PlayHint("BHint_35");
+				}
+				Vector TargetPos=TPOS;          
+				v.EnableBlinker(BLT_NONE);
+				v.EnableHeadLights(true);				
+				if (v.HasName("40_20_01"))
+				{
+					v.SetMaxPassengers(12);
+					v.SetMaxTransports(2);
+					for (int ind = 0; ind < 6; ind++)
+					{
+						v.PushActionExecuteCommand(ACTION_APPEND, "Create_Person", &v, 45, true);
+					}
+				}
+				else
+				{
+					v.SetMaxPassengers(3);
+					if (v.HasNamePrefix("40_84_03"))
+					{
+						v.PushActionExecuteCommand(ACTION_APPEND, "Create_Person", &v, 54, true);
+						v.PushActionWait(ACTION_APPEND, 0.5f);				
+						v.PushActionExecuteCommand(ACTION_APPEND, "Create_Person", &v, 53, true);	
+						v.PushActionWait(ACTION_APPEND, 0.5f);				
+						v.PushActionExecuteCommand(ACTION_APPEND, "Create_Person", &v, 53, true);
+					}
+					else if(v.HasName("40_84_02"))
+					{
+						v.PushActionExecuteCommand(ACTION_APPEND, "Create_Person", &v, 58, true);	
+						v.PushActionWait(ACTION_APPEND, 0.5f);					
+						v.PushActionExecuteCommand(ACTION_APPEND, "Create_Person", &v, 57, true);	
+						v.PushActionWait(ACTION_APPEND, 0.5f);				
+						v.PushActionExecuteCommand(ACTION_APPEND, "Create_Person", &v, 57, true);
+					}
+					else if(v.HasName("40_84_01"))
+					{
+						v.PushActionWait(ACTION_APPEND, 12.0f);
+						v.PushActionExecuteCommand(ACTION_APPEND, "Create_Person", &v, 1458, true);	
+						v.PushActionWait(ACTION_APPEND, 0.5f);					
+						v.PushActionExecuteCommand(ACTION_APPEND, "Create_Person", &v, 1457, true);	
+						v.PushActionWait(ACTION_APPEND, 0.5f);				
+						v.PushActionExecuteCommand(ACTION_APPEND, "Create_Person", &v, 1457, true);
+					}
+					else 
+					{
+						v.PushActionExecuteCommand(ACTION_APPEND, "Create_Person", &v, 58, true);	
+						v.PushActionWait(ACTION_APPEND, 0.5f);					
+						v.PushActionExecuteCommand(ACTION_APPEND, "Create_Person", &v, 57, true);	
+						v.PushActionWait(ACTION_APPEND, 0.5f);				
+						v.PushActionExecuteCommand(ACTION_APPEND, "Create_Person", &v, 57, true);
+					}
+				}
+				if (v.HasName("40_84_01")) v.PushActionWait(ACTION_APPEND, 3.0f); // DRF on map
+				else if (v.HasName("40_84_02")) v.PushActionWait(ACTION_APPEND, 300.0f); // REGA 300
+				else if (v.HasName("40_84_03")) v.PushActionWait(ACTION_APPEND, 160.0f); // SAR 160
+				else if (v.HasName("40_84_04")) v.PushActionWait(ACTION_APPEND, 250.0f); // BMI 250
+				else if (v.HasName("40_20_01")) v.PushActionWait(ACTION_APPEND, 250.0f); // BPOL 250
+				v.PushActionShowHide(ACTION_APPEND, false);
+				Game::FindFreePosition(&v, TargetPos, 100);
+				v.PushActionExecuteCommand(ACTION_APPEND, "FMS", Caller, 3, false);
+				v.SetSpeed(15.f);
+				v.PushActionExecuteCommand(ACTION_APPEND,"COMMANDOSPERRE",Caller,1,true);
+				v.PushActionFlyTo(ACTION_APPEND, TargetPos, (!(v.HasName("40_20_01")))&&(Target->GetType() == ACTOR_FLOOR || Target->GetType() == ACTOR_STREET) , -1.0f);
+				v.PushActionExecuteCommand(ACTION_APPEND, "FMS", &v, 4, false);
+				GameObject SoundDummy =  Game::CreateObject("mod:Prototypes/Objects/Misc/empty.e4p", "alarmSound_X");	
+				SoundDummy.PushActionExecuteCommand(ACTION_NEWLIST, "AlarmSoundFirst", &SoundDummy, 8, false);
+				v.PushActionWait(ACTION_APPEND, 0.1f);
+				v.PushActionExecuteCommand(ACTION_APPEND,"SOUND_PLAYER",Caller,0,true);
+				v.PushActionWait(ACTION_APPEND, 0.1f);
+				v.AssignCommand("ALARM_DUMMY");
+			}
+			// Set as Out on Alarm Boards:
+			CheckFahrzeugBoard(&v);
+			int vehicleNumber = Xmlutil::GetIntByVeh(Caller->GetName());
+			for (int ki = 0; ki < 5; ki++)
+			{
+				//System::Log("%i,%i", vehicleNumber, ki);
+				AlarmSelect[ki][vehicleNumber] = 0;
+			}	
+			return;
+		}
+		// Vehicles From Outside
+		if (v.HasNamePrefix("13")||v.HasNamePrefix("14")||v.HasNamePrefix("20")||v.HasNamePrefix("19")||v.HasNamePrefix("04")||v.HasNamePrefix("05")||v.HasNamePrefix("06")||v.HasNamePrefix("15")||v.HasNamePrefix("PP_30")||v.HasNamePrefix("KR")||v.HasNamePrefix("30"))
+		{
+			char time[8];
+			if (v.HasNamePrefix("13")) Game::GetGameString("13_ATIME", time, 8);
+			else if (v.HasNamePrefix("14")||v.HasNamePrefix("15")) Game::GetGameString("14_ATIME", time, 8);
+			else if (v.HasNamePrefix("20") || v.HasNamePrefix("30")) Game::GetGameString("20_ATIME", time, 8);
+			else if (v.HasNamePrefix("19")) Game::GetGameString("19_ATIME", time, 8);
+			else if (v.HasNamePrefix("04")) Game::GetGameString("04_ATIME", time, 8);
+			else if (v.HasNamePrefix("05")) Game::GetGameString("05_ATIME", time, 8);
+			else if (v.HasNamePrefix("06")) Game::GetGameString("06_ATIME", time, 8);
+			else if (v.HasNamePrefix("PP")) Game::GetGameString("PP_ATIME", time, 8);
+			else if (v.HasNamePrefix("KR")) Game::GetGameString("KR_ATIME", time, 8);
+			int WAIT = (Math::atoi(time))+delay;
+			if (v.HasNamePrefix("15")) WAIT += 120;
+			System::Log("Wait %i %s", WAIT, time);
+			float anfahrttime = (float) WAIT;
+			float waitfloat = 5.0f;
+			Vector TargetPos=TPOS;     
+			v.SetMaxPassengers(4);
+			v.SetMaxTransports(1);
+			v.PushActionWait(ACTION_APPEND, 0.5f);
+			if (v.HasNamePrefix("14_82")||v.HasNamePrefix("20_82")||v.HasNamePrefix("19_82"))
+			{
+				v.SetMaxPassengers(2);	
+				v.SetMaxTransports(0);
+				if (v.HasNamePrefix("19_82"))
+				{
+					v.PushActionExecuteCommand(ACTION_APPEND, "Create_Person", &v, 13, true);	 // LNA
+					v.PushActionWait(ACTION_APPEND, 0.5f);	
+					v.PushActionExecuteCommand(ACTION_APPEND, "Create_Person", &v, 37, true);	
+				}
+				else if (v.HasNamePrefix("14_82"))
+				{
+					v.PushActionExecuteCommand(ACTION_APPEND, "Create_Person", &v, 56, true);
+					v.PushActionWait(ACTION_APPEND, 0.5f);		
+					if (Math::rand()%2==0) v.PushActionExecuteCommand(ACTION_APPEND, "Create_Person", &v, 16, true);
+					else v.PushActionExecuteCommand(ACTION_APPEND, "Create_Person", &v, 17, true);
+				}
+				else if (v.HasNamePrefix("20_82"))
+				{
+					v.PushActionExecuteCommand(ACTION_APPEND, "Create_Person", &v, 60, true);
+					v.PushActionWait(ACTION_APPEND, 0.5f);		
+					v.PushActionExecuteCommand(ACTION_APPEND, "Create_Person", &v, 18, true);
+				}
+			} 
+			else if (v.HasName("04_43_01")||v.HasName("06_47_01")||v.HasName("05_42_01"))
+			{
+				v.SetMaxPassengers(6);
+				if (v.HasName("04_43_01")||v.HasName("05_42_01"))	v.SetMaxPassengers(9);
+				v.SetMaxTransports(0);
+				v.PushActionExecuteCommand(ACTION_APPEND, "Create_Person", &v, 1, true);
+				v.PushActionWait(ACTION_APPEND, 0.5f);						
+				v.PushActionExecuteCommand(ACTION_APPEND, "Create_Person", &v, 7, true);
+				v.PushActionWait(ACTION_APPEND, 0.5f);		
+				v.PushActionExecuteCommand(ACTION_APPEND, "Create_Person", &v, 5, true);
+				v.PushActionWait(ACTION_APPEND, 0.5f);		
+				v.PushActionExecuteCommand(ACTION_APPEND, "Create_Person", &v, 5, true);
+				v.PushActionWait(ACTION_APPEND, 0.5f);		
+				v.PushActionExecuteCommand(ACTION_APPEND, "Create_Person", &v, 5, true);
+				v.PushActionWait(ACTION_APPEND, 0.5f);		
+				v.PushActionExecuteCommand(ACTION_APPEND, "Create_Person", &v, 5, true);
+				if ((ForcePA||v.HasCommand("OHNE_PA")) && !v.HasName("06_47_01") && !v.HasName("04_14_01"))
+				{
+					v.PushActionExecuteCommand(ACTION_APPEND, "Pcmd_AGT", Caller, 0, false);
+				}
+			}
+			else if (v.HasName("04_14_01")||v.HasName("05_19_01"))
+			{
+				v.SetMaxPassengers(7);
+				v.SetMaxTransports(0);
+				v.PushActionExecuteCommand(ACTION_APPEND, "Create_Person", &v, 1, true);
+				v.PushActionWait(ACTION_APPEND, 0.5f);						
+				v.PushActionExecuteCommand(ACTION_APPEND, "Create_Person", &v, 7, true);
+				v.PushActionWait(ACTION_APPEND, 0.5f);		
+				v.PushActionExecuteCommand(ACTION_APPEND, "Create_Person", &v, 5, true);
+				v.PushActionWait(ACTION_APPEND, 0.5f);		
+				v.PushActionExecuteCommand(ACTION_APPEND, "Create_Person", &v, 5, true);
+				v.PushActionWait(ACTION_APPEND, 0.5f);		
+				v.PushActionExecuteCommand(ACTION_APPEND, "Create_Person", &v, 5, true);
+				v.PushActionWait(ACTION_APPEND, 0.5f);		
+				v.PushActionExecuteCommand(ACTION_APPEND, "Create_Person", &v, 5, true);
+				v.PushActionWait(ACTION_APPEND, 0.5f);		
+				v.PushActionExecuteCommand(ACTION_APPEND, "Create_Person", &v, 1, true);	
+			}
+			else if (v.HasName("04_24_01"))
+			{
+				v.SetMaxPassengers(3);
+				v.SetMaxTransports(0);
+				v.PushActionExecuteCommand(ACTION_APPEND, "Create_Person", &v, 1, true);
+				v.PushActionWait(ACTION_APPEND, 0.5f);		
+				v.PushActionExecuteCommand(ACTION_APPEND, "Create_Person", &v, 7, true);
+				v.PushActionWait(ACTION_APPEND, 0.5f);		
+				v.PushActionExecuteCommand(ACTION_APPEND, "Create_Person", &v, 5, true);
+			}
+			else if (v.HasName("04_74_01"))
+			{
+				v.SetMaxPassengers(6);
+				v.SetMaxTransports(0);
+				v.PushActionExecuteCommand(ACTION_APPEND, "Create_Person", &v, 1, true);
+				v.PushActionWait(ACTION_APPEND, 0.5f);		
+				v.PushActionExecuteCommand(ACTION_APPEND, "Create_Person", &v, 7, true);
+				v.PushActionWait(ACTION_APPEND, 0.5f);		
+				v.PushActionExecuteCommand(ACTION_APPEND, "Create_Person", &v, 5, true);
+				v.PushActionWait(ACTION_APPEND, 0.5f);		
+				v.PushActionExecuteCommand(ACTION_APPEND, "Create_Person", &v, 5, true);
+				v.PushActionWait(ACTION_APPEND, 0.5f);		
+				v.PushActionExecuteCommand(ACTION_APPEND, "Create_Person", &v, 5, true);
+				v.PushActionWait(ACTION_APPEND, 0.5f);		
+				v.PushActionExecuteCommand(ACTION_APPEND, "Create_Person", &v, 5, true);
+			}
+			else if (v.HasName("30_25_01"))
+			{
+				v.SetMaxPassengers(4);
+				v.SetMaxTransports(0);
+				v.PushActionExecuteCommand(ACTION_APPEND, "Create_Person", &v, 1, true);
+				v.PushActionWait(ACTION_APPEND, 0.5f);		
+				v.PushActionExecuteCommand(ACTION_APPEND, "Create_Person", &v, 5, true);
+			}
+			else if (v.HasName("30_10_01"))
+			{
+				v.SetMaxPassengers(4);
+				v.SetMaxTransports(0);
+				v.PushActionExecuteCommand(ACTION_APPEND, "Create_Person", &v, 2, true);
+				v.PushActionWait(ACTION_APPEND, 0.5f);		
+			}
+			else if (v.HasName("15_38_01"))
+			{
+				v.SetMaxPassengers(6);
+				v.SetMaxTransports(0);
+				for (int z = 0; z < 4; z++) v.PushActionExecuteCommand(ACTION_APPEND, "Create_Person", &v, (Math::rand()%2==0)?55:56, true);
+			}
+			else if (v.HasName("15_19_01"))
+			{
+				v.SetMaxPassengers(6);
+				v.SetMaxTransports(0);
+				for (int z = 0; z < 6; z++) v.PushActionExecuteCommand(ACTION_APPEND, "Create_Person", &v, (Math::rand()%2==0)?55:56, true);
+			}
+			else if (v.HasNamePrefix("PP"))
+			{
+				if(v.HasName("PP_30_04"))
+				{
+					v.SetMaxPassengers(3);
+					v.SetMaxTransports(0);
+					v.PushActionExecuteCommand(ACTION_APPEND, "Create_Person", &v, 23, true);
+					v.PushActionWait(ACTION_APPEND, 0.5f);		
+					v.PushActionExecuteCommand(ACTION_APPEND, "Create_Person", &v, 23, true);
+				}
+				else if(v.HasName("PP_30_01"))
+				{
+					v.SetMaxPassengers(6);
+					v.SetMaxTransports(12);		
+					v.PushActionExecuteCommand(ACTION_APPEND, "Create_Person", &v, 21, true);
+					v.PushActionWait(ACTION_APPEND, 0.5f);		
+					v.PushActionExecuteCommand(ACTION_APPEND, "Create_Person", &v, 22, true);
+					v.PushActionWait(ACTION_APPEND, 0.5f);		
+					v.PushActionExecuteCommand(ACTION_APPEND, "Create_Person", &v, 46, true);
+					v.PushActionWait(ACTION_APPEND, 0.5f);		
+					v.PushActionExecuteCommand(ACTION_APPEND, "Create_Person", &v, 47, true);
+				}
+			}
+			else if (v.HasNamePrefix("KR"))
+			{
+				v.SetMaxPassengers(2);		
+				v.PushActionExecuteCommand(ACTION_APPEND, "Create_Person", &v, 35, true);
+			}
+			else
+			{
+				v.SetMaxPassengers(4);	
+				v.SetMaxTransports(1); 
+				if (v.HasNamePrefix("20"))
+				{
+					v.PushActionExecuteCommand(ACTION_APPEND, "Create_Person", &v, 60, true);
+					v.PushActionWait(ACTION_APPEND, 0.5f);						
+					v.PushActionExecuteCommand(ACTION_APPEND, "Create_Person", &v, 60, true);
+				}
+				else if (v.HasNamePrefix("13"))
+				{
+					v.PushActionExecuteCommand(ACTION_APPEND, "Create_Person", &v, 59, true);
+					v.PushActionWait(ACTION_APPEND, 0.5f);						
+					v.PushActionExecuteCommand(ACTION_APPEND, "Create_Person", &v, 59, true);
+				}
+				else if (v.HasNamePrefix("14"))
+				{
+					v.PushActionExecuteCommand(ACTION_APPEND, "Create_Person", &v, (Math::rand()%2==0)?55:56, true);
+					v.PushActionWait(ACTION_APPEND, 0.5f);						
+					v.PushActionExecuteCommand(ACTION_APPEND, "Create_Person", &v, (Math::rand()%2==0)?55:56, true);
+				}
+				else 
+				{
+					v.PushActionExecuteCommand(ACTION_APPEND, "Create_Person", &v, 13, true);
+					v.PushActionWait(ACTION_APPEND, 0.5f);						
+					v.PushActionExecuteCommand(ACTION_APPEND, "Create_Person", &v, 13, true);
+				}
+				if (v.HasName("19_81_01")) v.PushActionExecuteCommand(ACTION_APPEND, "Create_Person", &v, 18, true);
+			}
+			Alarm[Xmlutil::GetIntByVeh(Caller->GetName())]=3;
+			// Delay for multiple vehicle alarm
+			if (v.HasNamePrefix("04")||v.HasNamePrefix("05"))
+			{
+				v.AssignCommand("ALARM_DUMMY"); // Assign Alarm_Dummy to calculate Alarmtime for FF
+				if (v.HasNamePrefix("04"))
+				{
+					VehicleList v1("04_14_01");
+					VehicleList v2("04_43_01");
+					VehicleList v3("04_24_01");
+					VehicleList v4("04_74_01");
+					if (v1.GetNumVehicles()> 0)
+					{
+						if (v1.GetVehicle(0)->HasCommand("ALARM_DUMMY") && v1.GetVehicle(0)->IsHidden()) waitfloat += 50.0f;
+					}
+					if (v2.GetNumVehicles()> 0)
+					{
+						if (v2.GetVehicle(0)->HasCommand("ALARM_DUMMY") && v2.GetVehicle(0)->IsHidden()) waitfloat += 50.0f;
+					}
+					if (v3.GetNumVehicles()> 0)
+					{
+						if (v3.GetVehicle(0)->HasCommand("ALARM_DUMMY") && v3.GetVehicle(0)->IsHidden()) waitfloat += 25.0f;
+					}
+					if (v4.GetNumVehicles()> 0)
+					{
+						if (v4.GetVehicle(0)->HasCommand("ALARM_DUMMY") && v4.GetVehicle(0)->IsHidden()) waitfloat += 50.0f;
+					}
+				}
+				else if (v.HasNamePrefix("05"))
+				{
+					VehicleList v1("05_19_01");
+					VehicleList v2("05_42_01");
+					if (v1.GetNumVehicles()> 0)
+					{
+						if (v1.GetVehicle(0)->HasCommand("ALARM_DUMMY") && v1.GetVehicle(0)->IsHidden()) waitfloat += 50.0f;
+					}
+					if (v2.GetNumVehicles()> 0)
+					{
+						if (v2.GetVehicle(0)->HasCommand("ALARM_DUMMY") && v2.GetVehicle(0)->IsHidden()) waitfloat += 50.0f;
+					}
+				}
+			}
+			waitfloat += delay;
+			Xmlutil::Alarmext(v,TargetPos,waitfloat, anfahrttime,8);
+			// Move Vehicle to marker
+			if (orientate)
+			{
+				v.PushActionExecuteCommand(ACTION_APPEND, "command_frei", &v, 1, false);
+			}
+			// Set as Out on Alarm Boards:
+			CheckFahrzeugBoard(&v);
+			int vehicleNumber = Xmlutil::GetIntByVeh(Caller->GetName());
+			for (int ki = 0; ki < 5; ki++)
+			{
+				//System::Log("%i,%i", vehicleNumber, ki);
+				AlarmSelect[ki][vehicleNumber] = 0;
+			}
+			return;
+		}
+		Actor Tar = Game::GetActor(WaitFor);
+		// Vehicles From Map
+		GameObject SoundDummy =  Game::CreateObject("mod:Prototypes/Objects/Misc/empty.e4p", "alarmSound_X");	
+		v.PushActionExecuteCommand(ACTION_APPEND, "FMS",&v, 10, false);
+		v.PushActionWait(ACTION_APPEND, delay);
+		v.PushActionWait(ACTION_APPEND, 0.1f);
+		if (v.HasName("01_10_01"))				 
+		{
+			v.SetMaxPassengers(2);
+			v.PushActionExecuteCommand(ACTION_APPEND, "Create_Person",&v, 26, true);
+			v.PushActionWait(ACTION_APPEND,0.1f);
+		} 
+		else if (v.HasName("10_40_01")||v.HasName("10_46_01")){v.SetMaxPassengers(6); AddVehicleToAlarmChain(Caller);  v.PushActionExecuteCommand(ACTION_APPEND, "PersonVehicleManager", &Tar);
+		} else if (v.HasName("18_11_01")){v.SetMaxPassengers(7); AddVehicleToAlarmChain(Caller);  v.PushActionExecuteCommand(ACTION_APPEND, "PersonVehicleManager", &Tar);
+		} else if (v.HasName("16_93_01")){
+			v.SetMaxPassengers(5); AddVehicleToAlarmChain(Caller); v.PushActionExecuteCommand(ACTION_APPEND, "PersonVehicleManager", &Tar);
+			v.SetChildEnabled("16_94_01_boot", v.HasCommand("MITBOOT")); v.SetChildEnabled("16_94_01_trailer", v.HasCommand("MITBOOT"));
+			if (v.HasCommand("MITBOOT")) { v.AssignCommand("DropTrailer"); v.AssignCommand("TrailerDropShip"); }
+			else { v.RemoveCommand("DropTrailer"); v.RemoveCommand("TrailerDropShip");  
+		}
+		} else if (v.HasName("10_10_01")||v.HasName("01_56_01")||v.HasName("10_33_01")||v.HasName("10_65_01")){v.SetMaxPassengers(2); AddVehicleToAlarmChain(Caller);  v.PushActionExecuteCommand(ACTION_APPEND, "PersonVehicleManager", &Tar);
+		} else if (v.HasName("21_22_51")||v.HasName("01_42_01")||v.HasName("01_46_01")||v.HasName("03_43_01")||v.HasName("02_44_01")||v.HasName("01_19_01")||v.HasName("16_19_01")){ v.SetMaxPassengers(9); AddVehicleToAlarmChain(Caller); v.PushActionExecuteCommand(ACTION_APPEND, "PersonVehicleManager", &Tar);
+		} else if (v.HasName("01_74_01")||v.HasName("01_11_01")||v.HasName("03_24_01")||v.HasName("02_19_01")||v.HasName("03_14_01")||v.HasName("18_28_01")||v.HasName("21_38_54")){ v.SetMaxPassengers(6); AddVehicleToAlarmChain(Caller); v.PushActionExecuteCommand(ACTION_APPEND, "PersonVehicleManager", &Tar);
+		} else if (v.HasName("01_33_01")||v.HasName("02_65_01")){ v.SetMaxPassengers(2); AddVehicleToAlarmChain(Caller); v.PushActionExecuteCommand(ACTION_APPEND, "PersonVehicleManager", &Tar);
+		} else if (v.HasName("01_58_01")||v.HasName("03_91_01")){ v.SetMaxPassengers(4); AddVehicleToAlarmChain(Caller); v.PushActionExecuteCommand(ACTION_APPEND, "PersonVehicleManager", &Tar);
+		} else if (v.HasName("11_83_01")||v.HasName("11_83_02")||v.HasName("11_83_03")||v.HasName("11_87_01")||v.HasName("19_81_01")||v.HasName("12_83_01")||v.HasName("12_83_02")||v.HasName("18_26_01")||v.HasName("18_26_02")){ v.SetMaxPassengers(4); v.SetMaxTransports(1); AddVehicleToAlarmChain(Caller);  v.PushActionExecuteCommand(ACTION_APPEND, "PersonVehicleManager", &Tar);
+		} else if (v.HasName("17_82_01")||v.HasName("12_82_01")||v.HasName("11_82_01")){ v.SetMaxPassengers(2); v.SetMaxTransports(0); AddVehicleToAlarmChain(Caller);  v.PushActionExecuteCommand(ACTION_APPEND, "PersonVehicleManager", &Tar);
+		} else if (v.HasName("PP_10_01")||v.HasName("PP_10_03")||v.HasName("PP_10_09")||v.HasName("PP_20_01")||v.HasName("PP_40_01")){ v.SetMaxPassengers(2); v.SetMaxTransports(1); AddVehicleToAlarmChain(Caller);  v.PushActionExecuteCommand(ACTION_APPEND, "PersonVehicleManager", &Tar);
+		} else if (v.HasName("PP_10_02")||v.HasName("PP_10_04")||v.HasName("PP_20_02")){
+		 if(v.HasCommand("P02")) {v.SetMaxPassengers(4); v.SetMaxTransports(1); }
+		 else { v.SetMaxPassengers(2); v.SetMaxTransports(2); }
+		 AddVehicleToAlarmChain(Caller);  v.PushActionExecuteCommand(ACTION_APPEND, "PersonVehicleManager", &Tar);
+		} else if (v.HasName("PP_10_07")||v.HasName("PP_10_08")){ v.PushActionWait(ACTION_APPEND, 12); v.SetMaxPassengers(6); v.SetMaxTransports(0); AddVehicleToAlarmChain(Caller);  v.PushActionExecuteCommand(ACTION_APPEND, "PersonVehicleManager", &Tar);
+		} else if (v.HasName("PP_10_11")) { v.PushActionWait(ACTION_APPEND, 2); v.SetMaxPassengers(2); v.SetMaxTransports(6); AddVehicleToAlarmChain(Caller);  v.PushActionExecuteCommand(ACTION_APPEND, "PersonVehicleManager", &Tar);
+		} else if (v.HasName("PP_10_12")) { v.PushActionWait(ACTION_APPEND, 8); v.SetMaxPassengers(4); v.SetMaxTransports(0); AddVehicleToAlarmChain(Caller);  v.PushActionExecuteCommand(ACTION_APPEND, "PersonVehicleManager", &Tar);
+		} else if (v.HasName("PP_10_13")) { v.PushActionWait(ACTION_APPEND, 14); v.SetMaxPassengers(6); v.SetMaxTransports(0); AddVehicleToAlarmChain(Caller);  v.PushActionExecuteCommand(ACTION_APPEND, "PersonVehicleManager", &Tar);
+		} else if (v.HasName("11_85_01")||v.HasName("12_85_01")){ v.PushActionWait(ACTION_APPEND, 4); v.SetMaxPassengers(4); v.SetMaxTransports(2); AddVehicleToAlarmChain(Caller);  v.PushActionExecuteCommand(ACTION_APPEND, "PersonVehicleManager", &Tar);
+		} else if (v.HasName("BS_01_01")){ v.PushActionWait(ACTION_APPEND, 20); v.SetMaxPassengers(4);v.SetMaxTransports(0);AddVehicleToAlarmChain(Caller); v.PushActionExecuteCommand(ACTION_APPEND, "PersonVehicleManager", &Tar);
+		} else if (v.HasName("21_21_10")){ v.SetMaxPassengers(6);v.SetMaxTransports(1);AddVehicleToAlarmChain(Caller); v.PushActionExecuteCommand(ACTION_APPEND, "PersonVehicleManager", &Tar);
+		} else if (v.HasName("PP_20_03"))				 
+		{
+			v.SetMaxPassengers(1);
+			v.PushActionExecuteCommand(ACTION_APPEND, "Create_Person",&v, 1120, true);
+			v.PushActionWait(ACTION_APPEND,3.0f);
+			v.SetChildEnabled("PERSON",true);
+// child erst beim aufsetzen enablen
+		}
+		else if (v.HasName("00_99_01"))				 
+		{
+			v.SetMaxPassengers(1);
+			v.PushActionExecuteCommand(ACTION_APPEND, "Create_Person",&v, 44, true);
+			v.PushActionWait(ACTION_APPEND,3.0f);
+			v.SetChildEnabled("PERSON",true);
+			Audio::PlaySample("mod:Audio/FX/kasten.wav");
+		}
+		else
+		{
+			System::Log("Alarm did not work correctly for vehicle %s", v.GetName());
+			Mission::PlayHint("BHint_28");
+			return;
+		}
+		if(v.HasNamePrefix("10_"))
+		{
+			GameObjectList l2;
+			l2 = Game::GetGameObjects("Dummy_FW2");
+			if(l2.GetNumObjects() == 0)
+			{
+				GameObject mDummy =  Game::CreateObject("mod:Prototypes/Objects/Misc/empty.e4p", "Dummy_FW2");
+				mDummy.Hide();
+				mDummy.SetUserData(100);
+			}
+			l2 = Game::GetGameObjects("Dummy_FW2");
+			GameObject *d1;
+			GameObject *d2;
+			d2 = *l2.GetObject(0);
+			GameObject dummdumm(d2);
+			if(dummdumm.GetUserData() == 100&&v.HasCommand("VCmdAutoSirenOff"))
+			{
+				dummdumm.SetUserData(-1);
+				//dummdumm.PushActionExecuteCommand(ACTION_NEWLIST, "PlayAlarmSound", &dummdumm, 10, false);
+				dummdumm.PushActionWait(ACTION_APPEND, 20.f);
+				dummdumm.PushActionExecuteCommand(ACTION_APPEND, "SirDummy", &dummdumm, 0, false);
+				SoundDummy.PushActionExecuteCommand(ACTION_NEWLIST, "AlarmSoundFirst", &SoundDummy, 6, false);
+			}
+		}/*
+		else if(v.HasNamePrefix("01_"))
+		{
+			GameObjectList l2;
+			l2 = Game::GetGameObjects("Dummy_FW1");
+			if(l2.GetNumObjects() == 0)
+			{
+				GameObject mDummy =  Game::CreateObject("mod:Prototypes/Objects/Misc/empty.e4p", "Dummy_FW1");
+				mDummy.Hide();
+				mDummy.SetUserData(100);
+			}
+			l2 = Game::GetGameObjects("Dummy_FW1");
+			GameObject *d1;
+			GameObject *d2;
+			d2 = *l2.GetObject(0);
+			GameObject dummdumm(d2);
+			if(dummdumm.GetUserData() == 100&&v.HasCommand("VCmdAutoSirenOff"))
+			{
+				dummdumm.SetUserData(-1);
+				dummdumm.PushActionExecuteCommand(ACTION_NEWLIST, "PlayAlarmSound", &dummdumm, 9, false);
+				dummdumm.PushActionWait(ACTION_APPEND, 20.f);
+				dummdumm.PushActionExecuteCommand(ACTION_APPEND, "SirDummy", &dummdumm, 0, false);
+			}
+		}*/
+		else if(v.HasNamePrefix("03_"))
+		{
+			GameObjectList l2;
+			l2 = Game::GetGameObjects("Dummy_FW3");
+			if(l2.GetNumObjects() == 0)
+			{
+				GameObject mDummy =  Game::CreateObject("mod:Prototypes/Objects/Misc/empty.e4p", "Dummy_FW3");
+				mDummy.Hide();
+				mDummy.SetUserData(100);
+			}
+			l2 = Game::GetGameObjects("Dummy_FW3");
+			GameObject *d1;
+			GameObject *d2;
+			d2 = *l2.GetObject(0);
+			GameObject dummdumm(d2);
+			if(dummdumm.GetUserData() == 100&&v.HasCommand("VCmdAutoSirenOff"))
+			{
+				dummdumm.SetUserData(38);
+				dummdumm.PushActionWait(ACTION_NEWLIST, 220.f);
+				dummdumm.PushActionExecuteCommand(ACTION_APPEND, "SirDummy", &dummdumm, 0, false);
+				SoundDummy.PushActionExecuteCommand(ACTION_NEWLIST, "AlarmSoundFirst", &SoundDummy, 0, false);
+			}
+			else
+				SoundDummy.PushActionExecuteCommand(ACTION_NEWLIST, "AlarmSoundFirst", &SoundDummy, 1, false);
+		}
+		else if(v.HasNamePrefix("02_"))
+		{
+			GameObjectList l2;
+			l2 = Game::GetGameObjects("Dummy_FW4");
+			if(l2.GetNumObjects() == 0)
+			{
+				GameObject mDummy =  Game::CreateObject("mod:Prototypes/Objects/Misc/empty.e4p", "Dummy_FW4");
+				mDummy.Hide();
+				mDummy.SetUserData(100);
+			}
+			l2 = Game::GetGameObjects("Dummy_FW4");
+			GameObject *d1;
+			GameObject *d2;
+			d2 = *l2.GetObject(0);
+			GameObject dummdumm(d2);
+			if(dummdumm.GetUserData() == 100&&v.HasCommand("VCmdAutoSirenOff"))
+			{
+				dummdumm.SetUserData(38);
+				dummdumm.PushActionWait(ACTION_NEWLIST, 220.f);
+				dummdumm.PushActionExecuteCommand(ACTION_APPEND, "SirDummy", &dummdumm, 0, false);
+				SoundDummy.PushActionExecuteCommand(ACTION_NEWLIST, "AlarmSoundFirst", &SoundDummy, 2, false);
+			}
+			else
+				SoundDummy.PushActionExecuteCommand(ACTION_NEWLIST, "AlarmSoundFirst", &SoundDummy, 3, false);
+		}
+		else if(v.HasNamePrefix("PP_") || v.IsPolice())
+			SoundDummy.PushActionExecuteCommand(ACTION_NEWLIST, "AlarmSoundFirst", &SoundDummy, 4, false);
+		else if(v.HasNamePrefix("01_"))
+		{
+			SoundDummy.PushActionExecuteCommand(ACTION_NEWLIST, "AlarmSoundFirst", &SoundDummy, 6, false);
+		}
+		else if(v.HasNamePrefix("11_"))
+			SoundDummy.PushActionExecuteCommand(ACTION_NEWLIST, "AlarmSoundFirst", &SoundDummy, 7, false);
+		else 
+			SoundDummy.PushActionExecuteCommand(ACTION_NEWLIST, "AlarmSoundFirst", &SoundDummy, 8, false);
+		/*
+		if (!v.IsPolice());
+		{
+			v.PushActionWait(ACTION_APPEND, 2.5f);
+			if (!(v.HasNamePrefix("10") || v.HasNamePrefix("01")|| v.HasNamePrefix("02")|| v.HasNamePrefix("03")))
+			{
+				v.PushActionExecuteCommand(ACTION_APPEND,"SOUND_PLAYER",Caller,0,true);
+				v.PushActionExecuteCommand(ACTION_APPEND,"OpenGate",Caller,42,true);
+			}
+		}*/
+		v.PushActionWait(ACTION_APPEND, 0.1f);
+		v.PushActionWait(ACTION_APPEND, 0.1f);
+		v.PushActionExecuteCommand(ACTION_APPEND,"LIGHTS",Caller,2,true);
+		v.PushActionWait(ACTION_APPEND, 0.1f);
+		if (!v.IsPolice()) v.PushActionWait(ACTION_APPEND, 1f); 
+		v.AssignCommand("ALARM_DUMMY");	
+		v.PushActionExecuteCommand(ACTION_APPEND, "FMS", Caller, 3, false);	
+		// Equip PA if set or LShift is pressed
+		if(v.HasCommand("OHNE_PA") || (ForcePA &&  v.HasCommand("MIT_PA"))) v.PushActionExecuteCommand(ACTION_APPEND, "Pcmd_AGT", Caller, 0, false);
+		v.PushActionExecuteCommand(ACTION_APPEND,"COMMANDOSPERRE",Caller,1,true);
+		//if (v.HasName("01_91_01") || v.HasName("01_42_01") || v.HasName("02_44_01") || v.HasName("03_24_01") || v.HasName("03_43_01") || v.HasName("01_74_01") || v.HasName("03_91_01")) v.PushActionExecuteCommand(ACTION_APPEND, "DUMMY_ALLERTFINISHED", &v, 0, true);
+		if (Target->IsValid() && Target->HasNamePrefix("AB") && v.HasCommand("VCmdWLFLoadup"))
+		{
+			v.PushActionExecuteCommand(ACTION_APPEND, "VCmdWLFLoadup", Target);
+		}
+		else if((Target->GetType()==ACTOR_FLOOR||Target->GetType()==ACTOR_STREET||mr.Mode != MOVE_ABORT) && !TorC && Caller->GetID() != Target->GetID()){
+			if(v.HasNamePrefix("10_"))
+				Game::ExecuteCommand("wachampel",Caller);
+			GameObject obj=Game::CreateObject("mod:Prototypes/Objects/Dummy/houselight2.e4p","Unnamed");
+			obj.SetPosition(TPOS);
+			obj.Show();
+			obj.PushActionWait(ACTION_APPEND,60);
+			obj.PushActionDeleteOwner(ACTION_APPEND);
+			if (!v.HasCommand("DummyHasSiren") && v.HasCommand("VcmdAutoSirenOff") && !Input::RCtrlPressed())
+			{
+				Vector tPos = obj.GetPosition();
+				Vector pos = v.GetPosition();
+				float CurrentDist = Math::dist(tPos.x, tPos.y, tPos.z, pos.x, pos.y, pos.z);
+				if (CurrentDist > 1200)
+				{
+					v.SetSpeed(11.f);
+					v.PushActionExecuteCommand(ACTION_APPEND,"VcmdSiren", &v);
+				}
+				else
+					v.SetSpeed(4.f);
+			}
+			//else if (v.IsBlueLightEnabled() && (Input::RCtrlPressed()))
+			//	if (v.IsBlueLightEnabled()) v.PushActionExecuteCommand(ACTION_APPEND, "VCmdBlue", &v, 0, false);
+			// Set marker if right strg
+			if (Torcheck(Caller))
+				AltstadtCheck(Caller, TPOS);
+			AutobahnFahrtCheck(&v, TPOS);
+			v.PushActionMove(ACTION_APPEND,obj.GetPosition());
+			if (v.HasCommand("FOXDAutobahn"))
+			{
+				v.RemoveCommand("FOXDAutobahn");
+			}
+			// Set Move Object
+			
+			// Move Vehicle to marker
+			if (orientate)
+			{
+				v.PushActionExecuteCommand(ACTION_APPEND, "command_frei", &v, 1, false);
+			}
+		}
+		else
+			v.PushActionUsePath(ACTION_APPEND, v.GetName(), v.GetSpeed());
+		// Set as Out on Alarm Boards:
+		CheckFahrzeugBoard(&v);
+		int vehicleNumber = Xmlutil::GetIntByVeh(Caller->GetName());
+		for (int ki = 0; ki < 5; ki++)
+		{
+			//System::Log("%i,%i", vehicleNumber, ki);
+			AlarmSelect[ki][vehicleNumber] = 0;
+		}
+	}
+	
+	bool CheckGroupTarget(GameObject *Caller, Actor *Target, int childID)
+	{
+		MoveResult mr = Commands::CheckMoveConditions(Caller, Target, childID);
+		if (mr.Mode != MOVE_ABORT) return true;
+		return (Target->GetType()==ACTOR_FLOOR||Target->GetType()==ACTOR_STREET);
+	}
+	void CheckAlarmBoard()
+	{
+		GameObjectList G = Game::GetGameObjects("FOXAZ");
+		for (int i == 1; i < Fahrzeuge; i++)
+		{
+			char name[12];
+			Xmlutil::GetVehByInt(name, i);
+			VehicleList vl(name);
+			if (vl.GetNumVehicles() > 0)
+			{
+				CheckFahrzeugBoard(vl.GetVehicle(0), false);
+			}	
+		}
+		for (int k = 0; k < G.GetNumObjects(); k++) CheckAlarmSettings(G.GetObject(k));
+		//System::Log("Alarm Board Check Completed: %i - %i = %i", TAGB, OUTB, TAGB-OUTB);
+	}
+	bool InStationVo(Vehicle v)
+	{
+		if (v.IsHidden()) return true;
+		ActorList al (v.GetName());
+		{
+			for (int k = 0; k < al.GetNumActors(); k++)
+			{
+				if (al.GetActor(k)->GetType() == ACTOR_VIRTUAL)
+				{
+					if (al.GetActor(k)->IsInsideVirtualObject(v.GetPosition())) return true;
+				}
+			}
+		}
+		return false;
+	}
+	bool CanCallFromMove(Vehicle v)
+	{
+		if (InStationVo(v)) return true;
+		if (v.IsHidden()) return false;
+		if (v.GetNumPassengers() == 0) return false;
+		if (v.GetUserData() == 6) return false;
+		if (v.HasCommand("DUMMY_GR")) return false;
+		if (v.HasCommand("DUMMY_G1")) return false;
+		if (v.HasCommand("DUMMY_G2")) return false;
+		if (v.HasCommand("DUMMY_G3")) return false;
+		if (v.HasCommand("DUMMY_G4")) return false;
+		if (v.HasCommand("DUMMY_G5")) return false;
+		if (v.HasCommand("DUMMY_G6")) return false;
+		if (v.HasCommand("DUMMY_G7")) return false;
+		if (v.HasCommand("DUMMY_G8")) return false;
+		if (v.GetNumTransported() > 0 ) 
+		{
+			PersonList pl = v.GetTransports();
+			for (int k = 0; k < pl.GetNumPersons(); k++)
+			{
+				if (!pl.GetPerson(k)->IsRescueDog()) return false;					
+			}
+		}
+		PersonList PL(v.GetName());
+		if (v.GetNumPassengers() > PL.GetNumPersons()) return false;
+		for (int k = 0; k < PL.GetNumPersons(); k++)
+		{
+			if (PL.GetPerson(k)->GetEnteredCarID() != v.GetID()) return false;
+		}
+		return true;
+	}
+	void CheckFahrzeugBoard(GameObject *in, bool checkSettings = true, bool initial = true)
+	{
+		Vehicle v(in);
+
+		GameObjectList G = Game::GetGameObjects("FOXAZ");
+		bool CanAlarm = false;
+		if (CheckPossible(&v)) CanAlarm = true;
+		if (v.HasCommand("FOXFreeToCall") && CanCallFromMove(v)) CanAlarm = true;
+		char cdis[255];
+		char cin[255];
+		char cal[255];
+		char calr[255];
+		char cinr[255];
+		snprintf(cdis, 255, "FOXA_%s_dis", v.GetName());
+		snprintf(cin, 255, "FOXA_%s", v.GetName());
+		snprintf(cal, 255, "FOXA_%s_alarm", v.GetName());	
+		snprintf(cinr, 255, "FOXA_%s_red", v.GetName());
+		snprintf(calr, 255, "FOXA_%s_red_alarm", v.GetName());
+		for (int k = 0; k < G.GetNumObjects(); k++)
+		{
+			//System::Log("VehicleReady %s %s %s %s",name, cdis, cin, cal);
+			//if (CanAlarm) System::Log("CanAlarm");
+			if (CanAlarm && G.GetObject(k)->HasCommand(cdis))
+			{
+				G.GetObject(k)->RemoveCommand(cdis);
+				G.GetObject(k)->AssignCommand(cin);
+			}
+			else if (CanAlarm && G.GetObject(k)->HasCommand(cinr))
+			{
+				G.GetObject(k)->RemoveCommand(cinr);
+				G.GetObject(k)->AssignCommand(cin);
+			}
+			else if (!CanAlarm && !G.GetObject(k)->HasCommand(cdis))
+			{
+				if (G.GetObject(k)->HasCommand(cin))
+				{
+					G.GetObject(k)->RemoveCommand(cin);
+					G.GetObject(k)->AssignCommand(cdis);
+				}
+				// This might be problematic in relation with shift switch, lets see if errors occur
+				if (G.GetObject(k)->HasCommand(cal) || G.GetObject(k)->HasCommand(calr))
+				{
+					if (G.GetObject(k)->HasCommand(cal))
+					{
+						G.GetObject(k)->RemoveCommand(cal);
+						G.GetObject(k)->AssignCommand(cdis);
+					}
+					if (G.GetObject(k)->HasCommand(calr))
+					{
+						G.GetObject(k)->RemoveCommand(calr);
+						G.GetObject(k)->AssignCommand(cdis);
+					}
+					int i = Xmlutil::GetIntByVeh(v.GetName());
+					for (int ki = 0; ki < 5; ki++)
+					{
+						//System::Log("%i,%i", vehicleNumber, ki);
+						AlarmSelect[ki][i] = 0;
+					}
+				}
+				if (G.GetObject(k)->HasCommand(cinr))
+				{
+					G.GetObject(k)->RemoveCommand(cinr);
+					G.GetObject(k)->AssignCommand(cdis);
+				}
+			}
+			if (v.HasNamePrefix("10_65_01") && CanAlarm)
+			{
+				if (!CheckEnoughPersonal(&v))
+				{
+					if (G.GetObject(k)->HasCommand(cin))
+					{
+						G.GetObject(k)->RemoveCommand(cin);
+						G.GetObject(k)->AssignCommand(cinr);
+					}
+				}
+			}
+		}
+		//System::Log(" ~~ Check %i", initial?1:0);
+		if (initial && v.HasNamePrefix("10"))
+		{
+			for (int k = 0; k < 5; k++)
+			{
+				if (k == 0) VehicleList vl("10_10_01");
+				else if (k == 1) VehicleList vl("10_40_01");
+				else if (k == 2) VehicleList vl("10_46_01");
+				else if (k == 3) VehicleList vl("10_33_01");
+				else if (k == 4) VehicleList vl("10_65_01");
+				//System::Log(" ~~ vcheck ~~ ");
+				if (vl.GetNumVehicles() > 0)
+				{
+					CheckFahrzeugBoard(vl.GetVehicle(0), false, false);
+					//System::Log(" ~~ CheckingEx ~~ ");
+				} 
+			}
+		}
+		if (initial && v.HasNamePrefix("11"))
+		{
+			for (int k = 0; k < 3; k++)
+			{
+				if (k == 0) VehicleList vl("11_83_01");
+				else if (k == 1) VehicleList vl("11_83_02");
+				else if (k == 2) VehicleList vl("11_87_01");
+				//System::Log(" ~~ vcheck ~~ ");
+				if (vl.GetNumVehicles() > 0)
+				{
+					CheckFahrzeugBoard(vl.GetVehicle(0), false, false);
+					//System::Log(" ~~ CheckingEx ~~ ");
+				} 
+			}
+		}
+		if (checkSettings) for (int k = 0; k < G.GetNumObjects(); k++) CheckAlarmSettings(G.GetObject(k));
+	}
+	void CheckBoardMIT(GameObject *Board)
+	{
+		// Return if does not have appropriate command
+		if (!(Board->HasCommand("MIT4HLF")||Board->HasCommand("MIT6HLF")||Board->HasCommand("MIT2MLF")||Board->HasCommand("MIT4MLF")||Board->HasCommand("MIT6MLF")||Board->HasCommand("MLFDIS")||Board->HasCommand("HLFDIS"))) return;
+		// Check for MIT Settings
+		VehicleList vH("10_46_01");
+		if (vH.GetNumVehicles()>0)
+		{
+			if (vH.GetVehicle(0)->HasCommand("ALARM_DUMMY") && (Board->HasCommand("MIT4HLF")|| Board->HasCommand("MIT6HLF")))
+			{
+				Board->RemoveCommand("MIT6HLF");
+				Board->RemoveCommand("MIT4HLF");
+				Board->AssignCommand("HLFDIS");
+			}
+			if (!vH.GetVehicle(0)->HasCommand("ALARM_DUMMY"))
+			{
+				bool add = false;
+				if (Board->HasCommand("HLFDIS")) add = true;
+				if (Board->HasCommand("MIT4HLF") && !vH.GetVehicle(0)->HasCommand("MIT4")) add=true;
+				if (Board->HasCommand("MIT6HLF") && !vH.GetVehicle(0)->HasCommand("MIT6")) add=true;
+				if (add)
+				{
+					Board->RemoveCommand("MIT6HLF");
+					Board->RemoveCommand("MIT4HLF");
+					Board->RemoveCommand("HLFDIS");
+					if (vH.GetVehicle(0)->HasCommand("MIT4")) Board->AssignCommand("MIT4HLF");
+					if (vH.GetVehicle(0)->HasCommand("MIT6")) Board->AssignCommand("MIT6HLF");
+				}
+			}
+		}
+		VehicleList vM("10_40_01");
+		if (vM.GetNumVehicles()>0)
+		{
+			if (vM.GetVehicle(0)->HasCommand("ALARM_DUMMY") && (Board->HasCommand("MIT2MLF")||Board->HasCommand("MIT4MLF")|| Board->HasCommand("MIT6MLF")))
+			{
+				Board->RemoveCommand("MIT6MLF");
+				Board->RemoveCommand("MIT4MLF");
+				Board->RemoveCommand("MIT2MLF");
+				Board->AssignCommand("MLFDIS");
+			}
+			if (!vM.GetVehicle(0)->HasCommand("ALARM_DUMMY"))
+			{
+				VehicleList vl("10_40_01");
+				
+				bool add = false;
+				if (Board->HasCommand("MLFDIS")) add = true;
+				if (Board->HasCommand("MIT2MLF") && !vM.GetVehicle(0)->HasCommand("MIT2")) add=true;
+				if (Board->HasCommand("MIT4MLF") && !vM.GetVehicle(0)->HasCommand("MIT4")) add=true;
+				if (Board->HasCommand("MIT6MLF") && !vM.GetVehicle(0)->HasCommand("MIT6")) add=true;
+				if (add)
+				{
+					Board->RemoveCommand("MIT6MLF");
+					Board->RemoveCommand("MIT4MLF");
+					Board->RemoveCommand("MIT2MLF");
+					Board->RemoveCommand("MLFDIS");
+					if (vM.GetVehicle(0)->HasCommand("MIT2")) Board->AssignCommand("MIT2MLF");
+					if (vM.GetVehicle(0)->HasCommand("MIT4")) Board->AssignCommand("MIT4MLF");
+					if (vM.GetVehicle(0)->HasCommand("MIT6")) Board->AssignCommand("MIT6MLF");
+				}
+			}
+		}
+	}
+	void CheckAlarmSettings(GameObject *Board)
+	{
+		CheckBoardMIT(Board);
+
+		bool IstTag = Xmlutil::Tag();
+		if (IstTag && Board->HasCommand("VCmdNACHTIcon"))
+		{
+			Board->RemoveCommand("VCmdNACHTIcon");
+			Board->AssignCommand("VCmdTAGIcon");
+		}
+		else if ((!IstTag) && Board->HasCommand("VCmdTAGIcon"))
+		{
+			Board->AssignCommand("VCmdNACHTIcon");
+			Board->RemoveCommand("VCmdTAGIcon");
+		}
+		int out = 1;
+		// Check for people
+		int BoardOut =0;
+		
+			VehicleList vl("10_33_01");
+		if (vl.GetNumVehicles()>0)
+		{
+			if (!vl.GetVehicle(0)->HasCommand("ALARM_DUMMY"))
+			{
+				if (Board->HasCommand("FOXA_10_33_01_alarm"))
+				{ 
+					 BoardOut = BoardOut+2;
+				}
+			}
+			else out = out*2;
+		} 
+		VehicleList vl("10_10_01");
+		if (vl.GetNumVehicles()>0)
+		{
+			if (!vl.GetVehicle(0)->HasCommand("ALARM_DUMMY"))
+			{
+				if (Board->HasCommand("FOXA_10_10_01_alarm"))
+				{
+					 BoardOut = BoardOut+1;
+				}
+			}
+			else out = out*3;
+		}
+		VehicleList vl("10_65_01");
+		if (vl.GetNumVehicles()>0)
+		{
+			if (!vl.GetVehicle(0)->HasCommand("ALARM_DUMMY"))
+			{
+				if (Board->HasCommand("FOXA_10_65_01_alarm"))
+				{
+					BoardOut = BoardOut+2;
+				}
+			}
+			else out = out*5;
+		}
+		VehicleList vl("10_46_01");
+		if (vl.GetNumVehicles()>0)
+		{
+			if (!vl.GetVehicle(0)->HasCommand("ALARM_DUMMY"))
+			{
+				if (Board->HasCommand("FOXA_10_46_01_alarm"))
+				{
+					if (vl.GetVehicle(0)->HasCommand("MIT4")) BoardOut = BoardOut+4;
+					else if (vl.GetVehicle(0)->HasCommand("MIT6")) BoardOut = BoardOut+6;
+					else if (vl.GetVehicle(0)->HasCommand("MIT2")) BoardOut = BoardOut+2;
+				}
+			}
+			else out = out*7;
+		}
+
+		VehicleList vl("10_40_01");
+		if (vl.GetNumVehicles()>0)
+		{
+			if (!vl.GetVehicle(0)->HasCommand("ALARM_DUMMY"))
+			{
+				if (Board->HasCommand("FOXA_10_40_01_alarm"))
+				{
+					if (vl.GetVehicle(0)->HasCommand("MIT4")) BoardOut = BoardOut+4;
+					else if (vl.GetVehicle(0)->HasCommand("MIT6")) BoardOut = BoardOut+6;
+					else if (vl.GetVehicle(0)->HasCommand("MIT2")) BoardOut = BoardOut+2;
+				}
+			}
+			else out = out*11;
+		}
+		int remaining = NACHTB;
+		if (Tag()) remaining = TAGB;
+		remaining = remaining - OUTB - BoardOut + (FW_ALARMSTUFE?ALARMB:0);
+		if (remaining < 0 ) remaining = 0;
+		//System::Log("%i %i %i", OUTB, BoardOut, remaining);
+		if (Board->HasCommand("FOXA_10_10_01") && remaining == 0 && out%3!=0)
+		{
+			Board->RemoveCommand("FOXA_10_10_01");
+			Board->AssignCommand("FOXA_10_10_01_dis");
+		}
+		if (Board->HasCommand("FOXA_10_33_01") && remaining < 2 && out%2!=0)
+		{
+			Board->RemoveCommand("FOXA_10_33_01");
+			Board->AssignCommand("FOXA_10_33_01_dis");
+		}
+		if (Board->HasCommand("FOXA_10_65_01") && remaining < 2 && out%5!=0)
+		{
+			Board->RemoveCommand("FOXA_10_65_01");
+			Board->AssignCommand("FOXA_10_65_01_red");
+		}
+		if (Board->HasCommand("FOXA_10_46_01"))
+		{
+			int need = 0;
+			VehicleList vl("10_46_01");
+			if (vl.GetNumVehicles()>0)
+			{
+				if (vl.GetVehicle(0)->HasCommand("MIT4")) need = 4;
+				else if (vl.GetVehicle(0)->HasCommand("MIT6")) need = 6;
+				else if (vl.GetVehicle(0)->HasCommand("MIT2")) need = 2;
+			}
+			//System::Log("10_46_01 %i, %i", remaining, need);
+			if (remaining < need && out%7!=0)
+			{
+				Board->RemoveCommand("FOXA_10_46_01");
+				Board->AssignCommand("FOXA_10_46_01_dis");
+			}
+		}
+		if (Board->HasCommand("FOXA_10_40_01"))
+		{
+			int need = 0;
+			VehicleList vl("10_40_01");
+			if (vl.GetNumVehicles()>0)
+			{
+				if (vl.GetVehicle(0)->HasCommand("MIT4")) need = 4;
+				else if (vl.GetVehicle(0)->HasCommand("MIT6")) need = 6;
+				else if (vl.GetVehicle(0)->HasCommand("MIT2")) need = 2;
+			}
+			if (remaining < need && out%11!=0)
+			{
+				Board->RemoveCommand("FOXA_10_40_01");
+				Board->AssignCommand("FOXA_10_40_01_dis");
+			}
+		}
+		// Set Person Display Number
+		if (remaining > 9) remaining = 9; // Maybe change with Icon for Alarmstufe
+		for (int k = 0; k < 10; k++)
+		{
+			char old[14];
+			char new[14];
+			snprintf(old, 14, "FOXA_PERS%i", k);
+			snprintf(new, 14, "FOXA_PERS%i", remaining);
+			if (Board->HasCommand(old))
+			{
+				Board->RemoveCommand(old);
+				Board->AssignCommand(new);
+			}
+		}
+		// RD
+		int RDOut = 0;
+		out = 1;
+		
+		VehicleList vl("11_83_01");
+		if (vl.GetNumVehicles()>0)
+		{
+			if (!vl.GetVehicle(0)->HasCommand("ALARM_DUMMY"))
+			{
+				if (Board->HasCommand("FOXA_11_83_01_alarm"))
+				{
+					RDOut = RDOut+2;
+				}
+			}
+			else out = out*2;
+		} 
+		
+		VehicleList vl("11_83_02");
+		if (vl.GetNumVehicles()>0)
+		{
+			if (!vl.GetVehicle(0)->HasCommand("ALARM_DUMMY"))
+			{
+				if (Board->HasCommand("FOXA_11_83_02_alarm"))
+				{
+					RDOut = RDOut+2;
+				}
+			}
+			else out = out*3;
+		}
+		VehicleList vl("11_87_01");
+		if (vl.GetNumVehicles()>0)
+		{
+			if (!vl.GetVehicle(0)->HasCommand("ALARM_DUMMY"))
+			{ 
+				if (Board->HasCommand("FOXA_11_87_01_alarm"))
+				{
+					RDOut = RDOut+2;
+				}
+			}
+			else out = out*5;
+		} 
+		int remainingRD = RKB-RKO-RDOut;
+		if (!RD_ALARMSTUFE)
+		{
+			if (Board->HasCommand("FOXA_11_83_01") && remainingRD < 2 && out%2!=0)
+			{
+				Board->RemoveCommand("FOXA_11_83_01");
+				Board->AssignCommand("FOXA_11_83_01_dis");
+			}
+			if (Board->HasCommand("FOXA_11_83_02") && remainingRD < 2 && out%3!=0)
+			{
+				Board->RemoveCommand("FOXA_11_83_02");
+				Board->AssignCommand("FOXA_11_83_02_dis");
+			}
+			if (Board->HasCommand("FOXA_11_87_01") && remainingRD < 2 && out%5!=0)
+			{
+				Board->RemoveCommand("FOXA_11_87_01");
+				Board->AssignCommand("FOXA_11_87_01_dis");
+			}
+		}
+	}
+	bool Tag()
+	{
+		int h,m,s;
+		Game::GetTime(h,m,s);
+		if (h > 17 ||  h < 8)
+		{
+			return false;
+		}
+		return true;
+	}
+	void TakeVehicleFromPool(GameObject *Caller)
+	{
+		if (Caller->HasNamePrefix("10_"))
+		{
+			if (Caller->HasCommand("MIT2")) OUTB = OUTB+2;
+			else if (Caller->HasCommand("MIT4")) OUTB = OUTB+4;
+			else if (Caller->HasCommand("MIT6")) OUTB = OUTB+6;
+			else if (Caller->HasCommand("MIT9")) OUTB = OUTB+9;
+			else if (Caller->HasName("10_10_01")) OUTB = OUTB+1;
+			else OUTB = OUTB+2;
+			if (OUTB < 0) OUTB = 0;
+		}
+		else if(Caller->HasName("11_83_01") || Caller->HasName("11_83_02") || Caller->HasName("11_87_01")) RKO = RKO+2;
+	}
+	void ReturnVehicleToPool(GameObject *Caller)
+	{
+		if (Caller->HasNamePrefix("10_"))
+		{
+			if (Caller->HasCommand("MIT2")) OUTB = OUTB-2;
+			else if (Caller->HasCommand("MIT4")) OUTB = OUTB-4;
+			else if (Caller->HasCommand("MIT6")) OUTB = OUTB-6;
+			else if (Caller->HasCommand("MIT9")) OUTB = OUTB-9;
+			else if (Caller->HasName("10_10_01")) OUTB = OUTB-1;
+			else if (!(Caller->HasCommand("OutVol")))OUTB = OUTB-2;
+			if (OUTB < 0) OUTB = 0;
+		}
+		else if (Caller->HasName("11_83_01") || Caller->HasName("11_83_02") || Caller->HasName("11_87_01")) RKO = RKO-2;
+	}
+	void ExecuteGroupAlarm(GameObject *Caller, Actor *Target, int childID, bool ForcePA = false, bool orientate = false)
+	{
+		int playerID = 0;
+		int LastID = -1;
+		if (Game::IsMultiplayer()) playerID = Caller->GetPlayerMP();
+		if (orientate)
+		{
+			for(int k = 0; k < Fahrzeuge; k++)
+			{
+				if (1 < AlarmSelect[playerID][k])
+				{
+					orientate = false;
+					System::Log(" ~~ Orientate prevented due to multi-Alarm ~~ ");
+				} 
+			}
+		}
+		bool longfound = false;
+		for (int i = 1; i < 200; i++)
+		{
+			bool found = false;
+			for(int k = 0; k < Fahrzeuge; k++)
+			{
+				if (!found)
+				{
+					if (AlarmSelect[playerID][k] == i)
+					{
+						char vehicle[16];
+						char target[16];
+						snprintf(target, 16, "%i_int", k);
+						Game::GetGameString(target, vehicle, 16);
+						found = true;
+						longfound = true;
+						VehicleList vL(vehicle);
+						if (vL.GetNumVehicles() > 0)
+						{
+							if(CheckPossible(vL.GetVehicle(0)) || vL.GetVehicle(0)->HasCommand("FOXFreeToCall"))
+							{
+								System::Log("Alarming vehicle %s in List of length %i", vL.GetVehicle(0)->GetName(), vL.GetNumVehicles());
+								vL.GetVehicle(0)->SetPlayerMP(Caller->GetPlayerMP());
+								PushActions(vL.GetVehicle(0), Target, childID, ForcePA, orientate, i-1, LastID);
+								LastID = vL.GetVehicle(0)->GetID();
+								//System::Log("%s %i", vehicle ,i);
+							}			
+						}
+						// Reset Alarm Icons
+					}
+				}
+			}
+			if (!found) break;
+		}
+		if (!longfound && orientate)
+		{
+			int id = MakerArray[Game::IsMultiplayer()?Caller->GetPlayerMP():0];
+			Vehicle orV( &Game::GetActor(id));
+			if (orV.IsValid() && orV.HasCommand("TurnTo")) orV.PushActionTurnTo(ACTION_NEWLIST, Game::GetCommandPos(), 0.0f);
+		}
+	}
+	void RegisterVehicle(GameObject *Caller, char * vehicle)
+	{
+		int playerID = 0;
+		if (Game::IsMultiplayer()) playerID = Caller->GetPlayerMP();
+		//System::Log("%i", playerID);
+		
+		char target[16];
+		char number[4];
+		snprintf(target, 16, "%s_int", vehicle);
+		Game::GetGameString(target, number, 4);
+		int vehicleNumber = Math::atoi(number);
+		int maximum = 0;
+		if (AlarmSelect[playerID][vehicleNumber] == 0)
+		{
+			for(int k = 0; k < Fahrzeuge; k++)
+			{
+				if (AlarmSelect[playerID][k]>maximum) maximum = AlarmSelect[playerID][k];
+			}
+			AlarmSelect[playerID][vehicleNumber] = maximum+1;
+			char command[255];
+			char command2[255];
+			char altcommand[255];
+			char altcommand2[255];
+			snprintf(command, 255, "FOXA_%s_alarm", vehicle);
+			snprintf(command2, 255, "FOXA_%s_red_alarm", vehicle);
+			snprintf(altcommand, 255, "FOXA_%s", vehicle);
+			snprintf(altcommand2, 255, "FOXA_%s_red", vehicle);
+			if (Caller->HasCommand(altcommand))
+			{
+				Caller->RemoveCommand(altcommand);
+				Caller->AssignCommand(command);
+			}
+			else if (Caller->HasCommand(altcommand2))
+			{
+				Caller->RemoveCommand(altcommand2);
+				Caller->AssignCommand(command2);
+			}
+			//System::Log("Registered %s as %i",command, maximum+1);
+		}
+		else
+		{
+			for(int k = 0; k < Fahrzeuge; k++)
+			{
+				if (AlarmSelect[playerID][k]>AlarmSelect[playerID][vehicleNumber]) AlarmSelect[playerID][k] = AlarmSelect[playerID][k]-1;
+			}
+			AlarmSelect[playerID][vehicleNumber] = 0;
+			char command[255];
+			char command2[255];
+			char altcommand[255];
+			char altcommand2[255];
+			snprintf(command, 255, "FOXA_%s_alarm", vehicle);
+			snprintf(command2, 255, "FOXA_%s_red_alarm", vehicle);
+			snprintf(altcommand, 255, "FOXA_%s", vehicle);
+			snprintf(altcommand2, 255, "FOXA_%s_red", vehicle);
+			if (Caller->HasCommand(command))
+			{
+				Caller->RemoveCommand(command);
+				Caller->AssignCommand(altcommand);
+			}
+			if (Caller->HasCommand(command2))
+			{
+				Caller->RemoveCommand(command2);
+				Caller->AssignCommand(altcommand2);
+			}
+			
+		}
+		VehicleList vl(vehicle);
+		if (vl.GetNumVehicles() > 0)CheckFahrzeugBoard(vl.GetVehicle(0));
+	}
+};
+object RegisterVehicleIn : CommandScript
+{
+	bool CheckTarget(GameObject *Caller, Actor *Target, int childID)
+	{
+		return true;
+	}
+	void PushActions(GameObject *Caller, Actor *Target, int childID)
+	{
+		GameObject g(Target);
+		if (!g.IsValid()) return;
+		AlarmHelper::RegisterVehicle(Caller, g.GetName());
+	}
+};
+object FOXFreeToCall: CommandScript
+{
+	FOXFreeToCall(){SetGroupID(20);}
+	bool CheckTarget(GameObject *Caller, Actor *Target, int childID){return true;}
+	void PushActions(GameObject *Caller, Actor *Target, int childID){
+		switch (childID)
+		{
+			case 0:
+			{
+				Caller->AssignCommand("FOXFreeToCall");
+				AlarmHelper::CheckFahrzeugBoard(Caller);
+			}
+			break;
+			case 1:
+			{
+				Caller->RemoveCommand("FOXFreeToCall");
+				AlarmHelper::CheckFahrzeugBoard(Caller);
+				Caller->PushActionExecuteCommand(ACTION_INSERT, "FMS", Caller, 3, false);
+			}
+			break;
+		}
+	}
+};
+// GOTOVCmdAlarm
+object VCmdAlarmOrient : CommandScript
+{ 
+	VCmdAlarmOrient()
+	{
+		SetIcon("alarm");
+		SetCursor("alarm");
+		SetPossibleCallers(ACTOR_VEHICLE);
+		SetGroupLeader(false);
+		SetGroupID(26);
+		SetPriority(202);
+	}
+
+	bool CheckGroupVisibility(GameObject *Caller)
+	{	
+		if (!(Input::LCtrlPressed() && Game::GetNumSelectedGameObjects() < 2)) return false;
+		if (Input::LShiftPressed()) return false;
+		return true;
+	}
+
+	bool CheckPossible(GameObject *Caller)
+	{
+		if (!Caller->HasCommand("VCmdAlarm")) return false;
+		if (!(Input::LCtrlPressed() && Game::GetNumSelectedGameObjects() < 2)) return false;
+		if (Input::LShiftPressed()) return false;
+		return AlarmHelper::CheckPossible(Caller);	
+	}
+	
+	bool CheckTarget(GameObject *Caller, Actor *Target, int childID)
+	{
+		return AlarmHelper::CheckTarget(Caller, Target, childID);
+	}
+	void PushActions(GameObject *Caller, Actor *Target, int childID)
+	{
+		AlarmHelper::PushActions(Caller, Target, childID, false, true);
+	}
+};
+object VCmdAlarmPA : CommandScript
+{ 
+	VCmdAlarmPA()
+	{
+		SetIcon("alarm");
+		SetCursor("alarm");
+		SetPossibleCallers(ACTOR_VEHICLE);
+		SetGroupLeader(false);
+		SetGroupID(26);
+		SetPriority(202);
+	}
+
+	bool CheckGroupVisibility(GameObject *Caller)
+	{	
+		if (!Input::LShiftPressed()) return false;
+		if ((Input::LCtrlPressed() && Game::GetNumSelectedGameObjects() < 2)) return false;
+		return true;
+	}
+
+	bool CheckPossible(GameObject *Caller)
+	{
+		if (!Caller->HasCommand("VCmdAlarm")) return false;
+		if (!Input::LShiftPressed()) return false;
+		if ((Input::LCtrlPressed() && Game::GetNumSelectedGameObjects() < 2)) return false;
+		return AlarmHelper::CheckPossible(Caller);	
+	}
+	
+	bool CheckTarget(GameObject *Caller, Actor *Target, int childID)
+	{
+		return AlarmHelper::CheckTarget(Caller, Target, childID);
+	}
+	void PushActions(GameObject *Caller, Actor *Target, int childID)
+	{
+		AlarmHelper::PushActions(Caller, Target, childID, true);
+	}
+};
+object VCmdAlarmOrientPA : CommandScript
+{ 
+	VCmdAlarmOrientPA()
+	{
+		SetIcon("alarm");
+		SetCursor("alarm");
+		SetPossibleCallers(ACTOR_VEHICLE);
+		SetGroupLeader(false);
+		SetGroupID(26);
+		SetPriority(203);
+	}
+
+	bool CheckGroupVisibility(GameObject *Caller)
+	{	
+		if (!Input::LShiftPressed()) return false;
+		if (!(Input::LCtrlPressed() && Game::GetNumSelectedGameObjects() < 2)) return false;
+		return true;
+	}
+
+	bool CheckPossible(GameObject *Caller)
+	{
+		if (!Caller->HasCommand("VCmdAlarm")) return false;
+		if (!Input::LShiftPressed()) return false;
+		if (!(Input::LCtrlPressed() && Game::GetNumSelectedGameObjects() < 2)) return false;
+		return AlarmHelper::CheckPossible(Caller);	
+	}
+	
+	bool CheckTarget(GameObject *Caller, Actor *Target, int childID)
+	{
+		return AlarmHelper::CheckTarget(Caller, Target, childID);
+	}
+	void PushActions(GameObject *Caller, Actor *Target, int childID)
+	{
+		AlarmHelper::PushActions(Caller, Target, childID, true, true);
+	}
+};
+object VCmdAlarm : CommandScript
+{ 
+	VCmdAlarm()
+	{
+		SetIcon("alarm");
+		SetCursor("alarm");
+		SetPossibleCallers(ACTOR_VEHICLE);
+		SetGroupLeader(true);
+		SetGroupID(26);
+		SetPriority(201);
+	}
+
+	bool CheckGroupVisibility(GameObject *Caller)
+	{	
+		if (Input::LShiftPressed()) return false;
+		if (Input::LCtrlPressed() && Game::GetNumSelectedGameObjects() < 2) return false;
+		return true;
+	}
+
+	bool CheckPossible(GameObject *Caller)
+	{
+		if (Input::LShiftPressed()) return false;
+		if (Input::LCtrlPressed() && Game::GetNumSelectedGameObjects() < 2) return false;
+		return AlarmHelper::CheckPossible(Caller);	
+	}
+	
+	bool CheckTarget(GameObject *Caller, Actor *Target, int childID)
+	{
+		return AlarmHelper::CheckTarget(Caller, Target, childID);
+	}
+	void PushActions(GameObject *Caller, Actor *Target, int childID)
+	{
+		AlarmHelper::PushActions(Caller, Target, childID);
+	}
+};
+
+// GOTOVehicleAlarm
+object VCmdAlarmSelected : CommandScript
+{
+	VCmdAlarmSelected(){ SetIcon("sendto"); SetCursor("alarm");SetPossibleCallers(ACTOR_VEHICLE);SetGroupID(991789); SetGroupLeader(true);SetPriority(203);}
+	bool CheckGroupVisibility(GameObject *Caller)
+	{	
+		if (Input::LShiftPressed()) return false;
+		if (Input::LCtrlPressed()) return false;
+		return true;
+	}
+	bool CheckPossible(GameObject *Caller)
+	{
+		if (Input::LShiftPressed()) return false;
+		if (Input::LCtrlPressed()) return false;
+		return true;
+	}
+	bool CheckTarget(GameObject *Caller, Actor *Target, int childID){return AlarmHelper::CheckGroupTarget(Caller, Target, childID);}
+	void PushActions(GameObject *Caller, Actor *Target, int childID){AlarmHelper::ExecuteGroupAlarm(Caller, Target, childID);}
+};
+object VCmdAlarmSelectedPA : CommandScript
+{
+	VCmdAlarmSelectedPA(){ SetIcon("sendto"); SetCursor("alarm");SetPossibleCallers(ACTOR_VEHICLE);SetGroupID(991789); SetGroupLeader(false);SetPriority(203);}
+	bool CheckGroupVisibility(GameObject *Caller)
+	{	
+		if (!Input::LShiftPressed()) return false;
+		if (Input::LCtrlPressed()) return false;
+		return true;
+	}
+	bool CheckPossible(GameObject *Caller)
+	{
+		if (!Input::LShiftPressed()) return false;
+		if (Input::LCtrlPressed()) return false;
+		return true;}
+	bool CheckTarget(GameObject *Caller, Actor *Target, int childID){return AlarmHelper::CheckGroupTarget(Caller, Target, childID);}
+	void PushActions(GameObject *Caller, Actor *Target, int childID){AlarmHelper::ExecuteGroupAlarm(Caller, Target, childID, true);}
+};
+object VCmdAlarmSelectedOrient : CommandScript
+{
+	VCmdAlarmSelectedOrient(){ SetIcon("sendto"); SetCursor("alarm"); SetPossibleCallers(ACTOR_VEHICLE); SetGroupID(991789); SetGroupLeader(false);SetPriority(203);}
+	bool CheckGroupVisibility(GameObject *Caller)
+	{	
+		if (!Input::LCtrlPressed()) return false;
+		if (Input::LShiftPressed()) return false;
+		return true;
+	}
+	bool CheckPossible(GameObject *Caller)
+	{
+		if (!Input::LCtrlPressed()) return false;
+		if (Input::LShiftPressed()) return false;
+		return true;
+	}
+	bool CheckTarget(GameObject *Caller, Actor *Target, int childID){return AlarmHelper::CheckGroupTarget(Caller, Target, childID);}
+	void PushActions(GameObject *Caller, Actor *Target, int childID){AlarmHelper::ExecuteGroupAlarm(Caller, Target, childID, false, true);}
+};
+object VCmdAlarmSelectedOrientPA : CommandScript
+{
+	VCmdAlarmSelectedOrientPA(){ SetIcon("sendto"); SetCursor("alarm");SetPossibleCallers(ACTOR_VEHICLE);SetGroupID(991789); SetGroupLeader(false);SetPriority(203);}
+
+	bool CheckGroupVisibility(GameObject *Caller)
+	{	
+		if (!Input::LShiftPressed()) return false;
+		if (!Input::LCtrlPressed()) return false;
+		return true;
+	}
+	bool CheckPossible(GameObject *Caller)
+	{ 
+		if (!Input::LShiftPressed()) return false;
+		if (!Input::LCtrlPressed()) return false;
+		return true;
+	}
+	bool CheckTarget(GameObject *Caller, Actor *Target, int childID){return AlarmHelper::CheckGroupTarget(Caller, Target, childID);}
+	void PushActions(GameObject *Caller, Actor *Target, int childID){AlarmHelper::ExecuteGroupAlarm(Caller, Target, childID, true, true);}
+};
+// GotoGameLoop
+object TenSecondGameLoop: CommandScript
+{
+	int runningIndex = 0;
+	TenSecondGameLoop(){}
+	bool CheckPossible(GameObject *Caller){return true;}
+	bool CheckTarget(GameObject *Caller, Actor *Target, int childID){return true;}
+	void PushActions(GameObject *Caller, Actor *Target, int childID)
+	{
+		runningIndex ++;
+		if (runningIndex % 600 == 0) Caller->PushActionExecuteCommand(ACTION_APPEND,"ZZ_KHManager",Target,0,false);
+		/* if (runningIndex %6 == 0) */
+		// Check for day
+		if (CheckTag != Xmlutil::Tag())
+		{
+			CheckTag = !CheckTag;
+			AlarmHelper::CheckAlarmBoard();
+		}
+		System::Log("GameLoop : %i seconds", runningIndex);
+		// time Management by 1 second update
+		
+		int h,m,s;
+		Game::GetTime(h,m,s);
+		int time = h*3600+m*60+s;
+		time += 30;
+		Game::SetTime((time/3600)%24,(time/60)%60,time%60);
+		
+		if (runningIndex % 10 == 0)
+		{
+			for (int k = 0; k < AlarmCircles; k++)
+			{
+				int id1 = -1;
+				int id2 = -1;
+				int id3 = -1;
+				int number = 1000;
+				int number2 = 1000;
+				int number3 = 1000;
+				char prefix[4];
+				if (AlarmNumbers[k] < 10) snprintf(prefix, 4, "0%i", AlarmNumbers[k]);
+				else snprintf(prefix, 4, "%i", AlarmNumbers[k]);
+				//System::Log("%s", prefix);
+				for (int i = 1; i < Fahrzeuge; i++)
+				{
+					char vehicle[12];
+					Xmlutil::GetVehByInt(vehicle, i);
+					VehicleList vL (vehicle);
+					if (vL.GetNumVehicles()>0)
+					{
+						if (vL.GetVehicle(0)->HasNamePrefix(prefix) || (vL.GetVehicle(0)->HasName("10_65_01") && (AlarmNumbers[k] == 1)))
+						{
+
+							if(vL.GetVehicle(0)->HasCommand("AcceptsPersonal1")) vL.GetVehicle(0)->RemoveCommand("AcceptsPersonal1");
+							if(vL.GetVehicle(0)->HasCommand("AcceptsPersonal2")) vL.GetVehicle(0)->RemoveCommand("AcceptsPersonal2");
+							if(vL.GetVehicle(0)->HasCommand("AcceptsPersonal3")) vL.GetVehicle(0)->RemoveCommand("AcceptsPersonal3");
+							//System::Log("%s %i", vL.GetVehicle(0)->GetName(), Alarm[i]);
+							if (Alarm[i] > 3)
+							{
+								if (Alarm[i] < number)
+								{
+									id3 = id2;
+									id2 = id1;
+									number3 = number2;
+									number2 = number;
+									number = Alarm[i];
+									id1 = vL.GetVehicle(0)->GetID();
+								}
+								else if (Alarm[i] < number2)
+								{
+									number3 = number2;
+									number2 = Alarm[i];
+									id3 = id2;
+									id2 = vL.GetVehicle(0)->GetID();
+								}
+								else if (Alarm[i] < number3)
+								{
+									number3 = Alarm[i];
+									id3 = vL.GetVehicle(0)->GetID();
+								}
+							}
+						}
+					}
+				}
+				char name [255];
+				if (AlarmNumbers[k] > 9) snprintf(name,255,"FOXA_VOL_0%i",AlarmNumbers[k]);
+				else snprintf(name,255,"FOXA_VOL_%i",AlarmNumbers[k]);
+				//System::Log(" ~~ Checking for alarm vehicle %s %i ~~ ", prefix, number);
+				if (number < 1000)
+				{
+					//System::Log("Accept Command Given %s", v.GetName());
+					//System::Log(" ~~ INDEX %i %i %i ~~ ", id1, id2, id3);
+					Vehicle v(& Game::GetActor(id1));
+					Vehicle v2(& Game::GetActor(id2));
+					Vehicle v3(& Game::GetActor(id3));
+					v.AssignCommand("AcceptsPersonal1");
+					//System::Log(" ~~ Assigned %i", v.HasCommand("AcceptsPersonal1")?1:0);
+					//if (v2.IsValid()){v2.AssignCommand("AcceptsPersonal2"); System::Log(" ~~ Vehicle 2 %s", v2.GetName());} 
+					//if (v3.IsValid()){v3.AssignCommand("AcceptsPersonal3"); System::Log(" ~~ Vehicle 3 %s", v3.GetName());} 
+					// Spawn Persons and collect them
+					// Collection still needs to be done
+					bool collected = false;
+					int collectionInt = 0;
+					PersonList pl(name);
+					for (int m = 0; m < pl.GetNumPersons(); m++)
+					{
+						if (collectionInt < 6)
+						{
+							if (pl.GetPerson(m)->HasCommand("GoHome"))
+							{
+								collected = true;
+								pl.GetPerson(m)->RemoveCommand("GoHome");
+								pl.GetPerson(m)->SetFleeing(true, false);
+								pl.GetPerson(m)->PushActionExecuteCommand(ACTION_NEWLIST, "FOXAPersonManager", NULL, 0);
+								pl.GetPerson(m)->SetRole(ROLE_CIVILIAN);
+								collectionInt = collectionInt+1;
+							}
+						}
+						if (!pl.GetPerson(m)->IsMoving() && !pl.GetPerson(m)->HasCommand("GoHome") && pl.GetPerson(m)->GetRole() == ROLE_CIVILIAN)
+						{
+							pl.GetPerson(m)->PushActionExecuteCommand(ACTION_APPEND, "FOXAPersonManager", NULL, 0);
+						}
+					}
+					// Spawning if noone is on the way already
+					if (!collected)
+					{
+						char Personal[16];
+						if (Xmlutil::Tag()) snprintf(Personal, 16, "%s_DAY", prefix);
+						else snprintf(Personal, 16, "%s_NIGHT", prefix);
+						char Pers[4];
+						Game::GetGameString(Personal, Pers, 4);
+						int num = Math::atoi(Pers);
+						int total = 0;
+						for (int m =0; m< (2*num); m++)
+						{
+							total = total + (Math::rand()%4) - 1;
+						}
+						if (total < 0) total = 0;
+						
+						int result = 0;
+						if (total%10>4) result = (total/10)+1;
+						else result = (total/10);
+						//System::Log(" ~~ Person Generation Result: %s : expected: %i actual: %i run: %i ~~ ", prefix, num, total, result);
+						for (int m = 0; m < result; m++)
+						{
+							Caller->PushActionExecuteCommand(ACTION_APPEND, "FOXRunPerson", NULL, AlarmNumbers[k]);
+						}
+					}
+				}
+				else
+				{
+					// Send all stuck Personal home
+					PersonList pl(name);
+					for (int m = 0; m < pl.GetNumPersons(); m++)
+					{
+						if (pl.GetPerson(m)->HasCommand("GoHome") && !pl.GetPerson(m)->IsMoving())
+						{
+							pl.GetPerson(m)->PushActionExecuteCommand(ACTION_APPEND, "FOXAPersonManager", NULL, 22);
+						}
+					}
+				}
+			}
+		}
+		if (runningIndex%60==5) // Print Object Count every Minute
+		{
+			ActorList AL = Game::GetActors();
+			GameObjectList all = Game::GetGameObjects();
+			System::Log("GameLoop : Total Number Actors %i, Total Number Objects %i", AL.GetNumActors(), all.GetNumObjects());
+			if (all.GetNumObjects() > 15000)
+			{
+				System::Log("GameLoop : Dangerously many objects %i, printing", all.GetNumObjects());
+				for (int k = 0; k < all.GetNumObjects(); k++)
+				{
+					System::Log("GameLoop : Object %i : %s - %s", k, all.GetObject(k)->GetName(), all.GetObject(k)->GetPrototypeName());
+				}
+				System::Log("GameLoop : Dangerously many objects %i, print finished", all.GetNumObjects());
+			}/*
+			for (int k = 0; k < all.GetNumObjects(); k++)
+			{
+				if (all.GetObject(k)->GetPosition().z < -10000) System::Log("GameLoop : Object under floor %i : %s - %s", k, all.GetObject(k)->GetName(), all.GetObject(k)->GetPrototypeName());
+			}*/
+		}
+		if (runningIndex > 15 && runningIndex % 10 == 5) Caller->PushActionExecuteCommand(ACTION_APPEND, "FOXCMLOOP");
+		Caller->PushActionWait(ACTION_APPEND, 1.0f);
+		Caller->PushActionExecuteCommand(ACTION_APPEND, "TenSecondGameLoop", Caller, 0, false);
+	}
+};
+// GotoMIT
+object MIT2 : CommandScript
+{
+	MIT2(){SetGroupID(DummyGroup_b);SetGroupLeader(true);SetRestrictions(RESTRICT_SELFEXECUTE);}
+ 	bool CheckPossible(GameObject *Caller){if (Caller->HasCommand("ALARM_DUMMY"))return false;if (!Caller->IsValid()) return false;if (Caller->GetType() == ACTOR_VEHICLE) return true; return false;}
+ 	bool CheckTarget(GameObject *Caller, Actor *Target, int childID){if (!Caller->IsValid() || !Target->IsValid() || Target->GetID() != Caller->GetID()) return false;if (Caller->GetType() == ACTOR_VEHICLE) return true; return true;}
+	void PushActions(GameObject *Caller, Actor *Target, int childID){
+		Caller->RemoveCommand("MIT2");
+		if (Caller->HasName("03_14_01")||Caller->HasName("16_19_01")||Caller->HasName("01_19_01")) Caller->AssignCommand("MIT6");
+		else if (Caller->HasName("16_93_01")) Caller->AssignCommand("MITBOOT");
+		else Caller->AssignCommand("MIT4");
+		if (Caller->HasNamePrefix("10_")) AlarmHelper::CheckAlarmBoard();
+	}
+};
+object MIT4 : CommandScript
+{
+	MIT4(){SetGroupID(DummyGroup_b);SetGroupLeader(true);SetRestrictions(RESTRICT_SELFEXECUTE);}
+ 	bool CheckPossible(GameObject *Caller){if (Caller->HasCommand("ALARM_DUMMY"))return false;if (!Caller->IsValid()) return false;if (Caller->GetType() == ACTOR_VEHICLE) return true; return false;}
+ 	bool CheckTarget(GameObject *Caller, Actor *Target, int childID){if (!Caller->IsValid() || !Target->IsValid() || Target->GetID() != Caller->GetID()) return false;if (Caller->GetType() == ACTOR_VEHICLE) return true; return true;}
+	void PushActions(GameObject *Caller, Actor *Target, int childID){
+		Caller->RemoveCommand("MIT4");
+		Caller->AssignCommand("MIT6");
+		if (Caller->HasNamePrefix("10_")) AlarmHelper::CheckAlarmBoard();
+	}
+};
+object MIT6 : CommandScript
+{
+	MIT6(){SetGroupID(DummyGroup_b);SetGroupLeader(true);SetRestrictions(RESTRICT_SELFEXECUTE);}
+ 	bool CheckPossible(GameObject *Caller){if (Caller->HasCommand("ALARM_DUMMY"))return false;if (!Caller->IsValid()) return false;if (Caller->GetType() == ACTOR_VEHICLE) return true; return false;}
+ 	bool CheckTarget(GameObject *Caller, Actor *Target, int childID){if (!Caller->IsValid() || !Target->IsValid() || Target->GetID() != Caller->GetID()) return false;if (Caller->GetType() == ACTOR_VEHICLE) return true; return true;}
+	void PushActions(GameObject *Caller, Actor *Target, int childID){
+		Caller->RemoveCommand("MIT6");
+		if (Caller->HasName("10_46_01") || Caller->HasName("03_24_01") || Caller->HasName("01_74_01")) Caller->AssignCommand("MIT4");	
+		else if ( Caller-> HasName("10_40_01") || Caller->HasName("03_14_01")|| Caller->HasName("01_19_01")) Caller->AssignCommand("MIT2");	
+		else if ( Caller->HasName("16_19_01")) Caller->AssignCommand("MITHUND");
+		else Caller->AssignCommand("MIT9");	
+		if (Caller->HasNamePrefix("10_")) AlarmHelper::CheckAlarmBoard();
+	}
+};
+object MIT9 : CommandScript
+{
+	MIT9(){SetGroupID(DummyGroup_b);SetGroupLeader(true);SetRestrictions(RESTRICT_SELFEXECUTE);}
+ 	bool CheckPossible(GameObject *Caller){if (Caller->HasCommand("ALARM_DUMMY"))return false;if (!Caller->IsValid()) return false;if (Caller->GetType() == ACTOR_VEHICLE) return true; return false;}
+ 	bool CheckTarget(GameObject *Caller, Actor *Target, int childID){if (!Caller->IsValid() || !Target->IsValid() || Target->GetID() != Caller->GetID()) return false;if (Caller->GetType() == ACTOR_VEHICLE) return true; return true;}
+	void PushActions(GameObject *Caller, Actor *Target, int childID){
+		Caller->RemoveCommand("MIT9");
+		Caller->AssignCommand("MIT4");
+		if (Caller->HasNamePrefix("10_")) AlarmHelper::CheckAlarmBoard();
+	}
+};
+object vecBoardOut : CommandScript
+{
+	bool CheckTarget(GameObject *Caller, Actor *Target, int childID){return true;}
+	void PushActions(GameObject *Caller, Actor *Target, int childID)
+	{
+		int i = Xmlutil::GetIntByVeh(Caller->GetName());
+		Alarm[i] = 3;
+	}
+};
+// GOTODebug
+object VCmdDebug : CommandScript
+ {
+ 	VCmdDebug()
+ 	{
+ 		SetIcon("Debug");
+		SetCursor("Debug");
+		SetRestrictions(RESTRICT_SELFEXECUTE);
+ 	}
+	bool CheckPossible(GameObject *Caller)
+	{
+		return Input::LShiftPressed();
+	}
+ 	bool CheckTarget(GameObject *Caller, Actor *Target, int childID)
+ 	{
+ 		if (!Caller->IsValid() || !Target->IsValid() || Target->GetID() != Caller->GetID()) return false; 
+ 		if (Caller->GetType() == ACTOR_VEHICLE) return true;
+ 		return true;
+ 	}
+
+	void PushActions(GameObject *Caller, Actor *Target, int childID)
+ 	{
+ 		if (Caller->HasCommand("ALARM_DUMMY")) AlarmHelper::ReturnVehicleToPool(Caller);
+ 		int spring=0;
+		char sn[40]; 
+		char sh[255];
+ 		GameObjectList l = Game::GetGameObjects(Caller->GetName());
+		PersonList pl(Caller->GetName());
+		PersonList pl2(ROLE_SQUAD);
+		if (Caller->HasName("40_84_01"))
+		{
+			GameObjectList tar("HELIPAD"); // Helipad orientieren
+			if (tar.GetNumObjects() > 0) tar.GetObject(0)->SetRotation(Caller); 
+		}
+		for(int i=0; i<l.GetNumObjects(); i++) 
+		{
+			if(l.GetObject(i)->GetType() == ACTOR_VEHICLE)
+			{
+				Vehicle tmp(l.GetObject(i));
+				for (int j=pl2.GetNumPersons()-1; j>-1; j--) 
+				{
+					if(tmp.IsUsingConnector(pl2.GetPerson(j)))
+					{
+						pl2.GetPerson(j)->Injure(INJUREREASON_SHOT, false);
+						pl2.GetPerson(j)->PushActionWait(ACTION_NEWLIST, 0.5f);	
+						pl2.GetPerson(j)->PushActionDeleteOwner(ACTION_APPEND);
+					}
+				}
+				Audio::StopSample(tmp.GetUserData());
+				tmp.SetCommandable(false);
+				tmp.Deselect();
+				tmp.PushActionExecuteCommand(ACTION_NEWLIST, "ZZDLK", &tmp, 97, false);
+				tmp.PushActionWait(ACTION_APPEND, 1.f);
+				tmp.PushActionDeleteOwner(ACTION_APPEND);
+			}
+		} 	
+		if (false  && ( Input::LCtrlPressed() || Input::RCtrlPressed()) )
+		{
+			Game::GetGameString(Caller->GetPrototypeName(), sn, 40);
+			snprintf(sh, 255, "%s wurde geloescht!", sn);
+		}
+		else
+		{
+			Game::GetGameString(Caller->GetPrototypeName(), sn, 40);
+			snprintf(sh, 255, "%s wurde zurueckgesetzt!", sn);
+
+			Vehicle v = Game::CreateVehicle(Caller->GetPrototypeFileName(), Caller->GetPrototypeName());
+
+			if (Game::IsMultiplayer()) 
+				v.SetPlayerMP(Caller->GetPlayerMP());
+
+			v.PushActionExecuteCommand(ACTION_NEWLIST, "VCmdInit", &v, 0, false);	
+			v.Select();
+			
+		}
+		for (int i=pl.GetNumPersons()-1; i>-1; i--) 
+		{
+			if (pl.GetPerson(i)->IsCarried() || pl.GetPerson(i)->IsArrested()) continue;
+			if (pl.GetPerson(i)->GetEnteredCarID() != -1 && pl.GetPerson(i)->GetEnteredCarID() != v.GetID()) continue;
+			if(!pl.GetPerson(i)->IsParamedicTeam())pl.GetPerson(i)->Injure(INJUREREASON_SHOT, false);
+			pl.GetPerson(i)->PushActionWait(ACTION_NEWLIST, 0.5f);	
+			pl.GetPerson(i)->PushActionDeleteOwner(ACTION_APPEND);		
+		}
+
+		if(Caller->HasNamePrefix("40_") && childID == 5)
+			return;
+		if (Game::IsMultiplayer()) 
+		{
+			ScriptInterface::ShowMessageTickerTextForAll(sh);
+		}
+		else 
+		{
+			Game::ShowHelpTextWindow(sh);
+		} 
+		// Reset Alarm Buttons
+		AlarmHelper::CheckAlarmBoard();
+	}	
+ };
+// GOTOEND_ALARM
+object END_ALARM : CommandScript
+{
+	END_ALARM()
+	{ }
+	bool CheckTarget(GameObject *Caller, Actor *Target, int ChildID)
+	{
+		if(!Caller->IsValid() || !Target->IsValid() || Target->GetID() != Caller->GetID() || Caller->GetType() != ACTOR_VEHICLE) return false;
+		 return true;
+		return false;
+	}
+
+	void PushActions(GameObject *Caller, Actor *Target, int ChildID)
+	{
+		// Do other stuff
+		if(Caller->HasCommand("ALARM_DUMMY"))
+			Caller->RemoveCommand("ALARM_DUMMY");
+		if(Caller->HasCommand("TOR_H"))
+			Caller->RemoveCommand("TOR_H");
+		if(Caller->HasCommand("ICH_HABE_STRETCHER"))
+			Caller->RemoveCommand("ICH_HABE_STRETCHER");
+		if(Caller->HasCommand("FOXFreeToCall"))
+			Caller->RemoveCommand("FOXFreeToCall");
+		// Reset Rotation and Position to force Multiplayer Resync (might not work, dont know).
+		Caller->SetRotation(Caller);
+		Caller->SetPosition(Caller->GetPosition());
+		Game::ExecuteCommand("RESETAGT", Caller, Caller);
+		//
+		Game::ExecuteCommand("ZZ_Shears",Caller,Caller);
+		if (Caller->HasCommand("FOXHabeGlasMaster")) Caller->EnableCommand("FOXHabeGlasMaster", true);
+		if (Caller->HasCommand("FOXHabeUnterbau")) Caller->EnableCommand("FOXHabeUnterbau", true);
+		if (Caller->HasCommand("FOXHabeStandrohr")) Caller->EnableCommand("FOXHabeStandrohr", true);
+		if (Caller->HasCommand("FOXHabeRetp")) Caller->EnableCommand("FOXHabeRetp", true);
+		if (Caller->HasCommand("ICH_HABE_FSR")) Caller->EnableCommand("ICH_HABE_FSR", true);
+		if (Caller->HasCommand("FOXHabeSchere")) Caller->EnableCommand("FOXHabeSchere", true);
+		if (Caller->HasCommand("FOXHabeSpreitzer")) Caller->EnableCommand("FOXHabeSpreitzer", true);
+		if (Caller->HasCommand("FOXHabeSchaumkanister")) Caller->EnableCommand("FOXHabeSchaumkanister", true);
+		if (Caller->HasCommand("FOXHabeSchaumrohr")) Caller->RemoveCommand("FOXHabeSchaumrohr");
+		if (Caller->HasCommand("FOXHabeSpineboard")) Caller->EnableCommand("FOXHabeSpineboard", true);
+		Caller->PushActionExecuteCommand(ACTION_INSERT, "FOXGetSchaumKanister", Caller, -98, false);
+		Caller->SetFlag(OF_HAS_FIRE_EXTINGUISHER);
+		// return personal
+		AlarmHelper::ReturnVehicleToPool(Caller);
+		// Show vehicle in station
+		if (Caller->HasCommand("OutVol"))
+			Caller->RemoveCommand("OutVol");
+		Alarm[Xmlutil::GetIntByVeh(Caller->GetName())] = 2;
+		if (Caller->HasName("18_11_01")) 
+		{
+			Caller->PushActionExecuteCommand(ACTION_INSERT, "FOXNAAufheben", Caller, 99);
+			RD_ALARMSTUFE = false;
+			AlarmHelper::CheckAlarmBoard();
+		}
+		if (Caller->HasName("01_11_01"))
+		{
+			FW_ALARMSTUFE = false;
+			AlarmHelper::CheckAlarmBoard();
+		} 
+		AlarmHelper::CheckFahrzeugBoard(Caller);
+		// Alarmstufen zuruecksetzen
+	}
+};
+object FOXAINITVEC: CommandScript
+{
+	bool CheckTarget(GameObject *Caller, Actor *Target, int childID){return true;}
+	void PushActions(GameObject *Caller, Actor *Target, int childID){
+		Alarm[Xmlutil::GetIntByVeh(Caller->GetName())] = 2;
+		AlarmHelper::CheckFahrzeugBoard(Caller);
+	}
+};
+object ReloadBoard: CommandScript
+{
+	bool CheckTarget(GameObject *Caller, Actor *Target, int childID){return true;}
+	void PushActions(GameObject *Caller, Actor *Target, int childID){
+		AlarmHelper::CheckAlarmBoard();
+	}
+};
+object Alarmstufe_RD : CommandScript
+{
+	Alarmstufe_RD()
+	{
+		SetIcon("Alarmstufe");
+		SetCursor("Alarmstufe");
+		SetValidTargets(ACTOR_VEHICLE);
+		SetRestrictions(RESTRICT_SELFEXECUTE);
+	}
+
+	bool CheckPossible(GameObject *Caller){
+		if (!Caller->HasCommand("ALARM_DUMMY")) return false;	
+		if (Mission::GetCounter("Injured Persons") > 7) return true;	
+		return false;
+	}
+
+	bool CheckTarget(GameObject *Caller, Actor *Target, int childID){return true;}
+
+	void PushActions(GameObject *Caller, Actor *Target, int childID)
+	{	
+		if (Mission::GetCounter("Injured Persons") > 7)
+		{
+			Vehicle v(Caller);
+			Mission::PlayHint("Emergency service alert level");
+			RD_ALARMSTUFE = true;
+			AlarmHelper::CheckAlarmBoard();
+		}
+	}
+};
+object Alarmstufe_FW : CommandScript
+{
+	Alarmstufe_FW()
+	{
+		SetIcon("Alarmstufe");
+		SetCursor("Alarmstufe");
+		SetValidTargets(ACTOR_VEHICLE);
+		SetRestrictions(RESTRICT_SELFEXECUTE);
+	}
+
+	bool Trouble()
+	{
+		//return true; // Debug
+		if (Mission::GetCounter("Burning Houses") > 5 || Mission::GetCounter("Burning Objects") > 20 || Mission::GetCounter("Injured Civils") > 7 || Mission::GetCounter("Injured Squads") > 4 || Mission::GetCounter("Dead Squads") > 2 || Mission::GetCounter("Contaminated Persons") > 1) return true;	
+		return false;
+	}
+
+	bool CheckPossible(GameObject *Caller){
+		if (!Caller->HasCommand("ALARM_DUMMY")) return false;
+		if (!Caller->HasCommand("VCmdUninstallELW")) return false;
+		if (Trouble()) return true;	
+		return false;
+	}
+
+	bool CheckTarget(GameObject *Caller, Actor *Target, int childID){return true;}
+
+	void PushActions(GameObject *Caller, Actor *Target, int childID)
+	{	
+		if (Trouble())
+		{
+			Vehicle v(Caller);
+			Mission::PlayHint("Fire Brigade Alert");
+			FW_ALARMSTUFE = true;
+			AlarmHelper::CheckAlarmBoard();
+		}
+	}
+};
+Object Alarm_Flughafen : CommandScript
+{
+	Alarm_Flughafen()
+	{
+		SetValidTargets(ACTOR_FLOOR);
+		SetCursor("alarm");
+	}
+
+	bool CheckPossible(GameObject *Caller)
+	{
+		if(Game::IsMultiplayer())return true;
+		VehicleList vl("30_25_01");
+		if(vl.GetNumVehicles()==0)return false;
+		return !vl.GetVehicle(0)->HasCommand("Alarm_Dummy");
+	}
+	
+	bool CheckTarget(GameObject *Caller, Actor *Target, int childID)
+	{
+		if (Caller->GetID() == Target->GetID() || Target->GetType() == ACTOR_VEHICLE || Target->GetType() == ACTOR_HOUSE || Target->GetType() == ACTOR_OPEN_HOUSE || Target->GetType() == ACTOR_PERSON || Target->GetType() == ACTOR_OBJECT) return false;                                
+		else return true;
+	}
+
+	void PushActions(GameObject *Caller, Actor *Target, int childID)
+	{
+		VehicleList vl("30_25_01");
+		if(vl.GetNumVehicles()==0)return;
+		if (vl.GetVehicle(0)->HasCommand("Alarm_Dummy")) 
+		{
+			Mission::PlayHint("FHint_58");
+			return;
+		}
+		if (Game::IsMultiplayer()) ScriptInterface::ShowMessageTickerTextForAll("FHint_59");
+		else Mission::PlayHint("FHint_59");
+		Vector TargetPos=Game::GetCommandPos();     
+		GameObjectList l0 = Game::GetGameObjects(TYPE_VEHICLE);                     
+		for(int i = 0; i < l0.GetNumObjects(); i++)
+		{
+			Vehicle v(l0.GetObject(i));
+            if(v.HasName("30_25_01")&& !v.HasCommand("Alarm_Dummy"))
+            {
+            	v.SetPlayerMP(Caller->GetPlayerMP());
+            	AlarmHelper::PushActions(&v, Target, 0, false, false, 1);
+            }
+
+            if(v.HasName("30_10_01")&& !v.HasCommand("Alarm_Dummy"))
+            {
+				v.SetPlayerMP(Caller->GetPlayerMP());
+            	AlarmHelper::PushActions(&v, Target, 0, false);
+            }
+		}
+	}
+};

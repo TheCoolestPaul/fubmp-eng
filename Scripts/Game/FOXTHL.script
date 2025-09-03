@@ -1,0 +1,999 @@
+/* TH Logik:
+
+1) Sichtung: liefert Informationen : KlemP, auslB, auslG, Antrieb
+2)  -	Glasmaster +
+	-	unterbauen +
+	-	Batterie (opt.)
+	- 	Behandeln (opt.)
+	-	Absicherung (Streuen, Brandschutz ETC (opt.))
+3)  -	Rettungsplatform LKW
+4)	-	Schneiden Schere
+	-	Schneiden Spreizer
+4.5)-	Brandentwicklung Öl
+5)	-	Pol Markierung + abschleppen
+	-	Pol Zeugen befragen
+
+*/
+int shearIndex = 1;
+int glasIndex = 1;
+const char Sparks[] = "mod:Prototypes/Objects/Particles/sparks02.e4p";
+int lastMTS = 1;
+char TextString[7];
+const char SCHERBEN[] = "mod:Prototypes/Vehicles/_Wrecks/Scherben.e4p";
+const char PUMPE[] = "mod:Prototypes/Vehicles/__ Feuerwehr/Tauchpumpe.e4p";
+const char MIREO_FLOOR[] = "mod:Prototypes/Objects/_Fuchsburg/Mireo_floor_A.e4p";
+class THHelper : CommandScript
+{
+	void CheckIcons(Actor * Target)
+	{
+
+	}
+	bool SichtenPossible(GameObject *Caller){
+		if (!Caller->IsValid()) return false;
+		Person p(Caller);
+		if (!p.IsValid()) return false;
+		if (p.IsCarryingAnything()) return false;
+		if (p.IsLinkedWithPerson()) return false;
+		if (p.GetEnteredHouseID()!=-1) return false;
+		return true;
+	}
+	bool SichtenTarget(GameObject *Caller, Actor *Target, int childID){
+		if(!Target->IsValid()||!Caller->IsValid()) return false;
+		Person p(Caller);
+		if (!p.IsValid()) return false;
+		if (p.GetEnteredCarID()!=-1) return false;
+		if (Target->GetType()== ACTOR_VEHICLE)
+		{
+			Vehicle v(Target);
+			// Check if vehicle is accident vehicle
+			if (!v.IsCivilCar() && v.GetVehicleType() != VT_POLICE_GETAWAY) return false;
+			if (v.HasNamePrefix("BMA_")) return false;
+			if (v.HasCommand("DummyIsOelspurAbgestreut") || v.HasCommand("DummyIsOelspur")) return false;
+			//
+			return true;
+		}
+		else if (Target->GetType() == ACTOR_OBJECT)
+		{
+			GameObject g(Target);
+			if (StrCompare(g.GetPrototypeName(), "ProtoFZG_2") == 0 
+			|| StrCompare(g.GetPrototypeName(), "ProtoFZG_1") == 0 
+			|| StrCompare(g.GetPrototypeName(), "ProtoFZE_1") == 0) return true;
+			return false;
+		}
+		return false;
+	}
+	void SichtenAction(GameObject *Caller, Actor *Target, int childID, bool ShowIcons, bool civil = false)
+	{
+		GameObject v(Target);
+		Person p (Caller);
+		if (!v.IsValid() || !p.IsValid()) return;
+		if (childID == 0)
+		{
+			p.PushActionMove(ACTION_NEWLIST, Target->GetPosition());
+			p.PushActionTurnTo(ACTION_APPEND, Target);
+			p.PushActionSwitchAnim(ACTION_APPEND, "gape");
+			p.PushActionWait(ACTION_APPEND, 2.0f);
+			/*
+			p.PushActionMove(ACTION_APPEND, Target->GetPosition());
+			p.PushActionTurnTo(ACTION_APPEND, Target);
+			p.PushActionSwitchAnim(ACTION_APPEND, "gape");
+			p.PushActionWait(ACTION_APPEND, 2.0f);*/
+			if (civil) p.PushActionExecuteCommand(ACTION_APPEND, "FOXSichtenC", Target, 1);
+			else if (ShowIcons) p.PushActionExecuteCommand(ACTION_APPEND, "FOXSichtenA", Target, 1);
+			else p.PushActionExecuteCommand(ACTION_APPEND, "FOXSichtenB", Target, 1);
+		}
+		else if (childID == 1)
+		{	
+			int enclosed = 0;
+			int antrieb = 0;
+			if (Target->GetType() == ACTOR_VEHICLE)
+			{
+				Vehicle t(&v);
+				if (t.GetNumPassengers()>0)
+				{
+					PersonList pl = t.GetPassengers();
+					t.RemoveObjectPath();
+					t.ClearActions();
+					for (int i = 0; i < pl.GetNumPersons(); i++)
+					{
+						Person p (pl.GetPerson(i));
+						if (p.GetRole() != ROLE_GANGSTER) continue;
+						pl.GetPerson(i)->PushActionLeaveCar(ACTION_NEWLIST, &t);
+						if (Math::rand()%2==0) // aufgeben
+						{
+							pl.GetPerson(i)->RemoveObjectPath();
+							pl.GetPerson(i)->SetPrimaryTarget(pl.GetPerson(i));
+							pl.GetPerson(i)->RemoveEquipment();
+							if(pl.GetPerson(i)->GetRole() == ROLE_GANGSTER)
+							{
+								pl.GetPerson(i)->SetBehaviour(BEHAVIOUR_GANGSTER_CIVILUNARMED);
+								pl.GetPerson(i)->SetUserData(-666);
+							}  //t.SetBehaviour(BEHAVIOUR_GANGSTER_CIVILARMED);
+							pl.GetPerson(i)->PushActionSwitchAnim(ACTION_APPEND, "hostage_down");
+					        pl.GetPerson(i)->PushActionWait(ACTION_APPEND, 20.0f);
+						}
+						else pl.GetPerson(i)->SetFleeing(true, false);
+					}
+					t.SetParking(true);
+					ScriptInterface::ShowMessageTickerTextForSinglePlayer(&p, "One person flees!");
+				}
+				if (!civil)
+				{
+					if (v.HasCommand("FOXSichtenA")) v.RemoveCommand("FOXSichtenA");
+					if (v.HasCommand("FOXSichtenB")) v.RemoveCommand("FOXSichtenB");
+				}			
+				if (v.HasCommand("FOXSichtenA")) System::Log("SichtenA");
+				if (v.HasCommand("FOXSichtenB")) System::Log("SichtenB");
+				if (v.HasCommand("FOXTHPENC1")) enclosed++;
+				if (v.HasCommand("FOXTHPENC2")) enclosed++;
+				if (civil)
+				{
+					char Hint[255];
+					snprintf(Hint, 255, "%s People Entrapped", enclosed==0?"Keine ":"Es sind ");
+					ScriptInterface::ShowMessageTickerTextForSinglePlayer(&p, Hint);
+					p.PushActionSwitchAnim(ACTION_APPEND, "idle");
+					v.AssignCommand("FOXSichtenC");
+					return;
+				}
+				if (ShowIcons)
+				{
+					v.AssignCommand("FOXSichtenA");
+				} 	
+				else
+				{
+					v.AssignCommand("FOXSichtenB");
+				} 
+				if (enclosed > 0) v.SetFlag(OF_PERSON_ENCLOSED);
+				// auslaufende B mittel Check
+			}
+			else if (StrCompare(v.GetPrototypeName(), "ProtoFZE_1") == 0) antrieb = 1;
+			char Hint[255];
+			snprintf(Hint, 255, "%i People Entrapped%s", enclosed, (antrieb==1?", ELECTRIC VEHICLE!":""));
+			ScriptInterface::ShowMessageTickerTextForSinglePlayer(&p, Hint);
+			CheckIcons(Target);
+			p.PushActionSwitchAnim(ACTION_APPEND, "idle");
+		}
+		
+	}
+};
+
+object FOXSichtenA : CommandScript
+{
+	FOXSichtenA(){
+		SetGroupID(42024);
+		SetGroupLeader(true);
+		SetCursor("scoutmine");
+		SetValidTargets(ACTOR_VEHICLE | ACTOR_OBJECT);
+		SetIcon("sendto");
+	}
+	bool CheckPossible(GameObject *Caller)
+	{
+		return THHelper::SichtenPossible(Caller) && !Input::LShiftPressed();
+	}
+	bool CheckGroupVisibility(GameObject *Caller)
+	{	
+		return !Input::LShiftPressed();
+	}
+	bool CheckTarget(GameObject *Caller, Actor *Target, int childID)  
+	{
+		return THHelper::SichtenTarget(Caller, Target, childID);
+	}
+	void PushActions(GameObject *Caller, Actor *Target, int childID)  
+	{
+		THHelper::SichtenAction(Caller, Target, childID, true);
+	}
+};
+object FOXSichtenB : CommandScript
+{
+	FOXSichtenB(){
+		SetGroupID(42024);
+		SetGroupLeader(false);
+		SetCursor("scoutmine");
+		SetValidTargets(ACTOR_VEHICLE | ACTOR_OBJECT);
+		SetIcon("sendto");
+	}
+	bool CheckPossible(GameObject *Caller)
+	{
+		return THHelper::SichtenPossible(Caller) && Input::LShiftPressed();
+	}
+	bool CheckGroupVisibility(GameObject *Caller)
+	{	
+		return Input::LShiftPressed();
+	}
+	bool CheckTarget(GameObject *Caller, Actor *Target, int childID)  
+	{
+		return THHelper::SichtenTarget(Caller, Target, childID);
+	}
+	void PushActions(GameObject *Caller, Actor *Target, int childID)  
+	{
+		THHelper::SichtenAction(Caller, Target, childID, false);
+	}
+};
+object FOXSichtenC : CommandScript
+{
+	FOXSichtenC(){
+		SetGroupID(42030);
+		SetGroupLeader(true);
+		SetCursor("askperson");
+		SetValidTargets(ACTOR_VEHICLE);
+		SetIcon("sendto");
+	}
+	bool CheckPossible(GameObject *Caller)
+	{
+		return THHelper::SichtenPossible(Caller);
+	}
+	bool CheckTarget(GameObject *Caller, Actor *Target, int childID)  
+	{
+		return THHelper::SichtenTarget(Caller, Target, childID);
+	}
+	void PushActions(GameObject *Caller, Actor *Target, int childID)  
+	{
+		THHelper::SichtenAction(Caller, Target, childID, false, true);
+	}
+};
+object FOXDummyHasZugang : CommandScript
+{
+	FOXDummyHasZugang(){
+
+	}
+	bool CheckTarget(GameObject *Caller, Actor *Target, int childID)  {return true;}
+	void PushActions(GameObject *Caller, Actor *Target, int childID)  {return;}
+};
+object FOXUseMTS : CommandScript
+{
+	FOXUseMTS(){
+		SetGroupID(42033);
+		SetGroupLeader(true);
+		SetCursor("use");
+		SetIcon("sendto");
+		SetValidTargets(ACTOR_OBJECT);
+	}
+	bool CheckPossible(GameObject *Caller)
+	{
+		Person P(Caller);
+		if (!P.IsValid()) return false;
+		return true;
+	}
+	bool CheckTarget(GameObject *Caller, Actor *Target, int childID)  
+	{
+		GameObject g(Target);
+		if (!g.IsValid()) return false;
+		if (g.HasCommand("FOXBIGVEHICLE") && g.HasCommand("FOXCMBLOCK") && g.GetType() == ACTOR_OBJECT && g.HasCommand("FOXCMMTSTARGET"))
+		{
+			if (g.HasCommand("FOXEquipBlock")) return false;
+			return true;
+		}
+		return false;
+	}
+	void PushActions(GameObject *Caller, Actor *Target, int childID)  
+	{
+		Person p(Caller);
+		GameObject v(Target);
+		Vector TargetPos = v.GetChildPosition("RETP");
+		if (!v.IsValid() || !p.IsValid()) return;
+		if (!v.IsChildEnabled("RETP") && v.GetUserData() == 242)
+		{
+			ScriptInterface::ShowMessageTickerTextForSinglePlayer(Caller, "FHint_16");
+			return;
+		}
+		if (childID == -1)
+		{
+			float Zeit = 30;
+			//P.PushActionUseEquipment(ACTION_APPEND, Target, childID, Zeit);
+			if (v.IsChildEnabled("RETP"))
+			{
+				//System::Log(" ~~ FOXTHL : Rettungsplatform erkannt ~~ ");
+				p.SetPlacementNone();
+				p.UpdatePlacement();
+				p.SetPosition(TargetPos);
+			}
+			p.SetCommandable(false);
+			p.SetAnimation("useextinguis");
+			p.PushActionWait(ACTION_APPEND, Zeit-5);
+			p.PushActionExecuteCommand(ACTION_APPEND, "FOXUseMTS", Target, -2, false);
+			p.PushActionWait(ACTION_APPEND, 5);
+			p.PushActionExecuteCommand(ACTION_APPEND, "FOXUseMTS", Target, -3, false);
+			// Sparks
+			float r[9];
+			GameObject sp = Game::CreateObject(Sparks, "Sparks");
+			float fy = 0;
+			float fx = 40.0f;
+			float fz = 0;
+			p.GetRotation(r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7], r[8]);
+			Math::RotateVector(fx, fy, fz, r);
+			Vector pos = p.GetPosition() + Vector(fx, fy, 30.0f);
+			sp.SetPosition(pos);
+			sp.SetRotation(&p);
+			sp.PushActionWait(ACTION_APPEND, Zeit);
+			sp.PushActionDeleteOwner(ACTION_APPEND);
+			//
+			lastMTS = 1+(lastMTS%3);
+			if (lastMTS == 1)Audio::PlaySample3D("mod:Audio/FX/equipment/MTS1.wav", p.GetPosition(), false);
+			else if (lastMTS == 2)Audio::PlaySample3D("mod:Audio/FX/equipment/MTS2.wav", p.GetPosition(), false);
+			else if (lastMTS == 3)Audio::PlaySample3D("mod:Audio/FX/equipment/MTS3.wav", p.GetPosition(), false);
+			v.AssignCommand("FOXEquipBlock");
+		}
+		else if (childID == -2)
+		{
+			v.PushActionSwitchAnim(ACTION_NEWLIST, "open");
+			v.PushActionSwitchAnim(ACTION_APPEND, "opened");
+			Audio::PlaySample3D("mod:Audio/FX/destruction/klonk02.wav", v.GetPosition(), false);
+		}
+		else if (childID == -3)
+		{
+			p.SetPlacement(PLACEMENT_CUSTOM_PLACEMENT);
+			p.UpdatePlacement();
+			Vector POS = p.GetPosition();
+			Game::FindFreePosition(&p, POS, 350.0f);
+			p.SetPosition(POS);
+			p.SetAnimation("idle");
+			p.SetCommandable(true);
+			v.RemoveCommand("FOXEquipBlock");
+			v.RemoveCommand("FOXCMMTSTARGET");
+			v.SetUserData(-42);
+		}
+		else
+		{
+			p.PushActionMove(ACTION_NEWLIST, TargetPos);
+			p.PushActionTurnTo(ACTION_APPEND, Target);
+			p.PushActionExecuteCommand(ACTION_APPEND, "FOXUseMTS", Target, -1, true);
+		}
+	}
+};
+object FOXUseGlasMaster : CommandScript
+{
+	FOXUseGlasMaster(){
+		SetGroupID(42023);
+		SetGroupLeader(true);
+		SetCursor("use");
+		SetIcon("sendto");
+	}
+	bool CheckPossible(GameObject *Caller)
+	{
+		Person P(Caller);
+		if (!P.IsValid()) return false;
+		return true;
+	}
+	bool CheckTarget(GameObject *Caller, Actor *Target, int childID)  
+	{
+		Vehicle v(Target);
+		if (!v.IsValid()) return false;
+		if (v.HasCommand("FOXSichtenA")|| v.HasCommand("FOXSichtenB"))
+		{
+			if (v.IsFlagSet(OF_PERSON_ENCLOSED) && !v.HasCommand("FOXUseGlasMaster"))
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+	void PushActions(GameObject *Caller, Actor *Target, int childID)  
+	{
+		Vehicle v(Target);
+		Person P(Caller);
+		if (childID == 0)
+		{
+			P.PushActionMove(ACTION_NEWLIST, v.GetPosition());
+			for (int k= -1; k < 2; k++)
+			{
+				for (int m = -1; m < 2; m++)
+				{
+					if (m == 0 || k == 0) P.PushActionWait(ACTION_APPEND, 0.2f);
+					else
+					{
+						Vector Pos = v.GetPosition() + Vector(k*80, m*80, 0);
+						P.PushActionMove(ACTION_APPEND, Pos);
+						P.PushActionTurnTo(ACTION_APPEND, Target);
+						P.PushActionSwitchAnim(ACTION_APPEND, "gape");
+						P.PushActionExecuteCommand(ACTION_APPEND, "FOXUseGlasMaster", Target, 2);
+						P.PushActionWait(ACTION_APPEND, 4.0f);
+						// debug
+					}
+				}
+			}
+			P.PushActionExecuteCommand(ACTION_APPEND, "FOXUseGlasMaster", Target, 1);
+		}
+		else if (childID == 1)
+		{
+			//System::Log(" ~~ Scherben Platziert");
+			Vehicle sh = Game::CreateVehicle(SCHERBEN, "scherben");
+			sh.RemoveFromRouter();
+			sh.SetPlacementNone();
+			sh.UpdatePlacement();
+			sh.SetPosition(v.GetPosition());
+			sh.SetRotation(&v);
+			P.PushActionMove(ACTION_APPEND, v.GetPosition());
+			v.AssignCommand("FOXUseGlasMaster");
+		}
+		else if (childID == 2)
+		{
+			//Audio::PlaySample3D("mod:Audio/FX/equipment/hosecoupling.wav", P.GetPosition()); // Debug
+			if (glasIndex == 1) Audio::PlaySample3D("mod:Audio/FX/equipment/Glasmaster_1.wav", P.GetPosition());
+			if (glasIndex == 2) Audio::PlaySample3D("mod:Audio/FX/equipment/Glasmaster_2.wav", P.GetPosition());
+			if (glasIndex == 3) Audio::PlaySample3D("mod:Audio/FX/equipment/Glasmaster_3.wav", P.GetPosition());
+			if (glasIndex == 4) Audio::PlaySample3D("mod:Audio/FX/equipment/Glasmaster_4.wav", P.GetPosition());
+			glasIndex = glasIndex % 4;
+			glasIndex++;
+		}
+	}
+};
+
+object FOXUseUnterbau : CommandScript
+{
+	FOXUseUnterbau(){
+		SetGroupID(42024);
+		SetGroupLeader(true);
+		SetCursor("get");
+		SetIcon("sendto");
+	}
+	bool CheckPossible(GameObject *Caller)
+	{
+		Person P(Caller);
+		if (!P.IsValid()) return false;
+		return true;
+	}
+	bool CheckTarget(GameObject *Caller, Actor *Target, int childID)  
+	{
+		Vehicle v(Target);
+		if (!v.IsValid()) return false;
+		if (v.HasCommand("FOXSichtenA")|| v.HasCommand("FOXSichtenB"))
+		{
+			if (v.IsFlagSet(OF_PERSON_ENCLOSED) && !v.HasCommand("FOXUseUnterbau"))
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+	void PushActions(GameObject *Caller, Actor *Target, int childID)  
+	{
+		Vehicle v(Target);
+		Person P(Caller);
+		if (v.HasCommand("FOXBIGVEHICLE"))
+		{
+			ScriptInterface::ShowMessageTickerTextForSinglePlayer(Caller, "FHint_17");
+			return;
+		}
+		if (childID < 4)
+		{
+			char str[8];
+			snprintf(str, 8, "U%i", childID+1);
+			Vector Pos = v.GetChildPosition(str);
+			P.PushActionMove(ACTION_APPEND, Pos);
+			P.PushActionTurnTo(ACTION_APPEND, Target);
+			P.PushActionSwitchAnim(ACTION_APPEND, "scout_work");
+			P.PushActionWait(ACTION_APPEND, 4.0f);
+			snprintf(str, 8, "U%i", childID);
+			if (childID > 0) v.SetChildEnabled(str, true);
+			P.PushActionExecuteCommand(ACTION_APPEND, "FOXUseUnterbau", Target, childID+1);
+		}
+		else if (childID == 4)
+		{
+			v.SetChildEnabled("U4", true);
+			if (P.HasNamePrefix("21")) P.ChangePrototype("mod:Prototypes/Persons/__ Bieberfelde/THWM.e4p");
+			else P.ChangePrototype("mod:Prototypes/Persons/__ Bieberfelde/FFM.e4p");
+			P.RemoveCommand("FOXEquipBlock");
+			P.RemoveCommand("FOXUseUnterbau");
+			P.PushActionWait(ACTION_APPEND, 0.2f);
+			P.PushActionMove(ACTION_APPEND, v.GetPosition());
+			v.AssignCommand("FOXUseUnterbau");
+		}
+	}
+};
+object FOXUseRetp : CommandScript
+{
+	FOXUseRetp(){
+		SetGroupID(42031);
+		SetGroupLeader(true);
+		SetCursor("get");
+		SetIcon("usejumppad");
+		SetPriority(2000);
+		SetValidTargets(ACTOR_OBJECT | ACTOR_VEHICLE);
+	}
+	bool CheckPossible(GameObject *Caller)
+	{
+		Person P(Caller);
+		if (!P.IsValid()) return false;
+		return true;
+	}
+	bool CheckTarget(GameObject *Caller, Actor *Target, int childID)  
+	{
+		GameObject v(Target);
+		if (!v.IsValid()) return false;
+		if (v.HasCommand("FOXBIGVEHICLE") && v.HasCommand("FOXCMMTSTARGET")) return true;
+		// Get Prototype Filename Zug
+		if (StrCompare(v.GetPrototypeName(), "Mireo_broken_A") == 0 && v.IsChildEnabled("DACH")) return true;
+		if(v.GetType() != ACTOR_VEHICLE) return false;
+		if (v.HasCommand("FOXSichtenA")|| v.HasCommand("FOXSichtenB"))
+		{
+			if (v.IsFlagSet(OF_PERSON_ENCLOSED) && (v.HasCommand("FOXBIGVEHICLE")) && !v.IsChildEnabled("RETP"))
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+	void PushActions(GameObject *Caller, Actor *Target, int childID)  
+	{
+		GameObject v(Target);
+		if (v.IsChildEnabled("RETP")) return;
+		if (StrCompare(v.GetPrototypeName(), "Mireo_broken_A") == 0 && !v.IsChildEnabled("FLOOR")) return;
+		Person P(Caller);
+		if (childID == -1)
+		{
+			if (P.HasNamePrefix("21")) P.ChangePrototype("mod:Prototypes/Persons/__ Bieberfelde/THWM.e4p");
+			else P.ChangePrototype("mod:Prototypes/Persons/__ Bieberfelde/FFM.e4p");
+			P.RemoveCommand("FOXEquipBlock");
+			P.RemoveCommand("FOXUseRetp");
+			P.RemoveEquipment();
+			P.PushActionWait(ACTION_APPEND, 0.2f);
+			VehicleList vl(P.GetName());
+			if (vl.GetNumVehicles() > 0)
+			{
+				P.PushActionMove(ACTION_APPEND, vl.GetVehicle(0)->GetPosition());
+			}
+			if (v.IsChildEnabled("DACH")) 
+			{
+				v.SetChildEnabled("DACH", false);
+				v.SetChildEnabled("FLOOR", false);
+				v.SetChildEnabled("DOOR", false);
+				char name[255];
+				snprintf(name,255,"%s_floor",v.GetID());
+				GameObject newFloor = Game::CreateObject(MIREO_FLOOR, name);
+				newFloor.SetPlacementNone();
+				newFloor.UpdatePlacement();
+				newFloor.SetPosition(v.GetPosition());
+				newFloor.SetRotation(&v); 
+				newFloor.SetUserData(v.GetID());
+			}
+			else v.SetChildEnabled("RETP", true);
+			v.SetUserData(P.GetUserData());
+		}
+		else
+		{
+			if (v.IsChildEnabled("DACH")) Vector pos = v.GetChildPosition("DOOR"); 
+			else Vector pos = v.GetChildPosition("RETP");
+			P.PushActionMove(ACTION_NEWLIST, pos);				
+			P.PushActionTurnTo(ACTION_APPEND, Target);
+			P.PushActionSwitchAnim(ACTION_APPEND, "putobj");
+			P.PushActionExecuteCommand(ACTION_APPEND, "FOXUseRetp", Target, -1);
+		}
+	}
+};
+object FOXGeneratorStarten : CommandScript
+{
+	FOXGeneratorStarten(){
+		SetIcon("GeneratorStarten");
+		SetCursor("install");
+		SetGroupID(31004);
+		SetGroupLeader(true);
+	}
+	bool CheckPossible(GameObject *Caller)
+	{
+		return Caller->IsValid() && Caller->GetEquipment()== EQUIP_NONE;
+	}
+	bool CheckTarget(GameObject *Caller, Actor *Target, int childID)  
+	{
+		Vehicle v (Target);
+		if (!v.IsValid()) return false;
+		return v.HasCommand("VCmdLiMa") && v.IsCommandEnabled("VCmdLiMa");
+	}
+	void PushActions(GameObject *Caller, Actor *Target, int childID)  
+	{	
+		Vehicle v(Target);
+		if (!v.IsValid()) return;
+		Person p(Caller);
+		if (!p.IsValid()) return;
+		if (!v.HasCommand("VCmdLiMa")) return;
+		if (!v.IsCommandEnabled("VCmdLiMa")) return;
+		Vector POS = v.GetChildPosition("POS_G2");
+		if (v.HasName("21_38_54")) POS = v.GetPosition();
+		if (childID == 1 || childID == -100)
+		{
+			if (p.Distance(POS.x, POS.y, POS.z) < 200)
+			{
+				if (!v.HasCommand("DUMMY_G2") && !v.HasName("21_38_54"))
+				{
+					p.PushActionExecuteCommand(ACTION_APPEND, "FOXGSteuerung", &v, 2);	
+				}
+				Audio::StopSample(v.GetUserData());
+				// Generator starten
+				if (!v.HasCommand("GENERATOR_ON") && childID != -100)
+				{
+					
+					v.AssignCommand("GENERATOR_ON");
+					v.PushActionExecuteCommand(ACTION_NEWLIST, "SOUND_PLAYER", Target, 6, true);
+					p.PushActionExecuteCommand(ACTION_APPEND, "FOXGSteuerung", &v, 21); 
+				}
+				// Generator stoppen
+				else
+				{
+					System::Log("GeneratorAus");
+					if (v.HasCommand("DUMMY_PU"))
+					{
+						v.PlayAnimCloseDoor("PU", 1.0f, 0);
+						v.RemoveCommand("DUMMY_PU");
+					}
+					v.RemoveCommand("GENERATOR_ON");
+				}
+				v.PushActionWait(ACTION_APPEND, 1.0f);
+				p.PushActionWait(ACTION_APPEND, 2.0f);	
+				p.PushActionSwitchAnim(ACTION_APPEND, "idle");
+			}
+			else 
+			{
+				p.PushActionWait(ACTION_NEWLIST, 1.0f);
+				p.PushActionExecuteCommand(ACTION_APPEND, "FOXGeneratorStarten");
+				System::Log("Generator zu weit weg");
+			}
+		}
+		else
+		{
+			p.PushActionMove(ACTION_NEWLIST, POS);
+			p.PushActionTurnTo(ACTION_APPEND, Target);
+			p.PushActionSwitchAnim(ACTION_APPEND, "useextinguis");
+			p.PushActionExecuteCommand(ACTION_APPEND, "FOXGeneratorStarten", Target, childID==-99?-100:1);
+		}
+	}
+};
+object FOXBatterieAbklemmen : CommandScript
+{
+	FOXBatterieAbklemmen(){
+		SetCursor("repair");
+		SetIcon("repair");
+		SetGroupID(31000);
+		SetGroupLeader(false);
+	}
+	bool CheckPossible(GameObject *Caller)
+	{
+		return true;
+	}
+	bool CheckGroupVisibility(GameObject *Caller){
+		Person P(Caller);
+		if (!P.IsValid()) return false;
+		if(P.GetEquipment() != EQUIP_THW_CASE) return false;
+		return true;
+	}
+	bool CheckTarget(GameObject *Caller, Actor *Target, int childID)  
+	{
+		Vehicle v(Target);
+		if (!v.IsValid()) return false;
+		if (v.HasCommand("DummyIsOelspurAbgestreut")) return false;
+		if (v.HasCommand("FOXSichtenA")|| v.HasCommand("FOXSichtenB")|| v.HasCommand("FOXSichtenC"))
+		{
+			if (v.HasCommand("FOXBatterieAbklemmen")) return false;
+			return true;
+		}
+		return false;
+	}
+	void PushActions(GameObject *Caller, Actor *Target, int childID)  
+	{
+		Vehicle v(Target);
+		Person P(Caller);
+		/*
+		if (!v.HasCommand("FOXSichtenA") && !v.HasCommand("FOXSichtenB"))
+		{
+			ScriptInterface::ShowMessageTickerTextForSinglePlayer(&v,"FHint_38");
+			return;
+		}
+		*/
+		if (!v.HasCommand("FOXDummyHasZugang"))
+		{
+			ScriptInterface::ShowMessageTickerTextForSinglePlayer(&v,"FHint_8");
+			return;
+		}
+		if (childID == 4242)
+		{
+			P.PushActionSwitchAnim(ACTION_APPEND, "idle");
+			v.AssignCommand("FOXBatterieAbklemmen");
+			ScriptInterface::ShowMessageTickerTextForSinglePlayer(&P,"FHint_11");
+		}
+		else
+		{
+			// Vor Fahrzeug
+			float r[9]; 
+			float fy = 0;
+			float fx = 100;
+			float fz = 0;
+			v.GetRotation(r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7], r[8]);
+			Math::RotateVector(fx, fy, fz, r);
+			Vector pos = v.GetPosition() + Vector(fx, fy, 1.0f);
+			P.PushActionMove(ACTION_APPEND, pos);
+			P.PushActionTurnTo(ACTION_APPEND, Target);
+			P.PushActionSwitchAnim(ACTION_APPEND, "scout_sitdown");
+			P.PushActionWait(ACTION_APPEND, 2.0f);
+			P.PushActionSwitchAnim(ACTION_APPEND, "scout_work");		
+			P.PushActionWait(ACTION_APPEND, 5.0f);
+			P.PushActionExecuteCommand(ACTION_APPEND, "FOXBatterieAbklemmen", Target, 4242);
+		}
+	}
+};
+object FOXNeedHelp : CommandScript
+{
+	FOXNeedHelp()
+	{
+		SetGroupID(20);
+		SetCursor("aim");
+		SetIcon("aim");
+	}
+	bool CheckPossible(GameObject *Caller)
+	{
+		return true;
+	}
+	bool CheckTarget(GameObject *Caller, Actor *Target, int childID)  
+	{
+		return true;
+	}
+	void PushActions(GameObject *Caller, Actor *Target, int childID)  
+	{
+		Person P(Caller);
+		if (P.IsValid())
+		{
+			if (childID == 0)
+			{
+				Mission::PlayHint("FHINT_9");
+				char name[255];
+				snprintf(name, 255, "%i_ATT", P.GetID());
+				GameObject G = Game::Game::CreateObject("mod:Prototypes/Objects/_Fuchsburg/AttentionMaker.e4p",name);
+				G.SetPlacementNone();
+				G.UpdatePlacement();
+				G.SetPosition(P.GetPosition());
+				G.PushActionExecuteCommand(ACTION_NEWLIST, "FOXNeedHelp", Caller, 1);
+				P.AssignCommand("FOXNeedHelp");
+				P.PushActionWait(ACTION_APPEND, 1.0f);
+				P.PushActionExecuteCommand(ACTION_APPEND, "FOXNeedHelp", Target, 1);
+			}
+			else
+			{
+				if (!P.HasCommand("FOXNeedHelp"))
+				{
+					char name[255];
+					snprintf(name, 255, "%i_ATT", P.GetID());
+					GameObjectList gol = Game::GetGameObjects(name);
+					if (gol.GetNumObjects() > 0)
+					{
+						Actor a = Game::GetActor(gol.GetObject(0)->GetUserData());
+						Person Helper(&a);
+						if (Helper.IsValid())
+						{
+							P.SetCommandable(true);
+							Helper.SetCommandable(true);
+							Vehicle cut(Target);
+							if (cut.IsValid() && ((P.HasCommand("FOXHabeSchere") &&  cut.HasCommand("FOXTHPENC2"))|| (P.GetEquipment() == EQUIP_SHEARS && cut.HasCommand("FOXTHPENC1"))))
+							{
+								Game::GetGameString("SHEARS_TIME", TextString, 7);
+								float Zeit = Math::atoi(TextString);
+								//P.PushActionUseEquipment(ACTION_APPEND, Target, childID, Zeit);
+								P.SetCommandable(false);
+								if (P.HasCommand("FOXHabeSchere")) P.SetAnimation("useextinguis");
+								else P.SetAnimation("usescissors");
+								P.PushActionWait(ACTION_APPEND, Zeit);
+								P.PushActionExecuteCommand(ACTION_APPEND, "UseShears", Target, 144, false);
+								int audio = 0;
+								if (shearIndex == 1) audio = Audio::PlaySample3D("mod:Audio/FX/equipment/Shears01.wav", P.GetPosition(), true);
+								if (shearIndex == 2) audio = Audio::PlaySample3D("mod:Audio/FX/equipment/Shears02.wav", P.GetPosition(), true);
+								if (shearIndex == 3) audio = Audio::PlaySample3D("mod:Audio/FX/equipment/Shears04.wav", P.GetPosition(), true);
+								if (shearIndex == 4) audio = Audio::PlaySample3D("mod:Audio/FX/equipment/Shears05.wav", P.GetPosition(), true);
+								if (shearIndex == 5) audio = Audio::PlaySample3D("mod:Audio/FX/equipment/Shears06.wav", P.GetPosition(), true);
+								if (Audio::IsPlaying(cut.GetUserData())) Audio::StopSample(cut.GetUserData());
+								cut.SetUserData(audio);
+								shearIndex = shearIndex%5;
+								shearIndex++;
+								Helper.SetUserData(P.GetID());
+								Helper.PushActionTurnTo(ACTION_APPEND, Target);
+								Helper.SetCommandable(false);
+								Helper.PushActionSwitchAnim(ACTION_APPEND, "useextinguis");
+								if (P.HasCommand("FOXHabeSchere")) cut.RemoveCommand("FOXTHPENC2");
+								else cut.RemoveCommand("FOXTHPENC1");
+								gol.GetObject(0)->PushActionDeleteOwner(ACTION_NEWLIST);;
+								// wird in use shears aufgelöst
+							}
+						}
+					}
+				}
+				else 
+				{
+					P.PushActionWait(ACTION_NEWLIST, 1.0f);
+					P.PushActionExecuteCommand(ACTION_APPEND, "FOXNeedHelp", Target, 1, false);
+				}
+			}
+		}
+		else
+		{
+			Person PP(Target);
+			if ((!PP.IsValid()) || (PP.Distance(Caller) > 10.0f) || (!PP.HasCommand("FOXNeedHelp")))
+			{
+				PP.RemoveCommand("FOXNeedHelp");
+				Caller->PushActionWait(ACTION_APPEND, 2.0f);
+				Caller->PushActionDeleteOwner(ACTION_APPEND);
+			}
+			else 
+			{
+				Caller->PushActionWait(ACTION_APPEND, 1.0f);
+				Caller->PushActionExecuteCommand(ACTION_NEWLIST, "FOXNeedHelp", Target, 1);
+			}
+		}
+	}
+};
+object FOXHelp : CommandScript
+{
+	void FoxHelp()
+	{
+		SetIcon("sendto");
+		SetGroupID(42025);
+		SetGroupLeader(true);
+		SetCursor("use");
+	}
+	bool CheckPossible(GameObject *Caller)
+	{
+		Person P(Caller);
+		if (!P.IsValid()) return false;
+		if(P.HasCommand("FOXEquipBlock") || P.GetEquipment() != EQUIP_NONE) return false;
+		return true;
+	}
+	bool CheckTarget(GameObject *Caller, Actor *Target, int childID)  
+	{
+		Person P(Target);
+		if (!P.IsValid()) return false;
+		return P.HasCommand("FOXNeedHelp");
+	}
+	void PushActions(GameObject *Caller, Actor *Target, int childID)  
+	{
+		Person P(Caller);
+		Person PP(Target);
+		if (childID == 0)
+		{
+			P.PushActionMove(ACTION_NEWLIST, PP.GetPosition());
+			P.PushActionTurnTo(ACTION_APPEND, Target);
+			P.PushActionExecuteCommand(ACTION_APPEND, "FOXHelp", Target, 1);
+		}
+		if (childID == 1)
+		{
+			if (P.Distance(PP) < 100.0f)
+			{
+				P.SetCommandable(false);
+				PP.SetCommandable(false);
+				PP.RemoveCommand("FOXNeedHelp");
+				char name[255];
+				snprintf(name, 255, "%i_ATT", PP.GetID());
+				GameObjectList gol = Game::GetGameObjects(name);
+				if (gol.GetNumObjects() > 0)
+				{
+					gol.GetObject(0)->SetUserData(P.GetID());
+				}
+			}
+			else Mission::PlayHint("FHint_3");
+		}
+	}
+};
+object FOXUseTauch : CommandScript
+{
+	FOXUseTauch(){
+		SetGroupID(42034);
+		SetPriority(300);
+		SetGroupLeader(true);
+		SetCursor("dive");
+		SetIcon("sendto");
+		SetValidTargets(ACTOR_OBJECT);
+	}
+	bool CheckTarget(GameObject *Caller, Actor *Target, int childID)  
+	{
+		GameObject g(Target);
+		if (!g.IsValid()) return false;
+		if (StrCompare(g.GetPrototypeName(), "water_base") == 0) return true;
+		return false;
+	}
+	void PushActions(GameObject *Caller, Actor *Target, int childID)  
+	{
+		GameObject g(Target);
+		Person p(Caller);
+		if (!g.IsValid() || !p.IsValid()) return;
+		if (childID == -1)
+		{
+			if (p.Distance(g.GetPosition().x, g.GetPosition().y, p.GetPosition().z) > 180.0f)
+			{
+				if (Game::IsMultiplayer()) ScriptInterface::ShowMessageTickerTextForSinglePlayer(Caller,"BHint_9");
+				else Mission::PlayHint("BHint_9");
+				return;
+			}
+			g.AssignCommand("FOXHabeTauch");
+			if (p.HasNamePrefix("21")) p.ChangePrototype("mod:Prototypes/Persons/__ Bieberfelde/THWM.e4p");
+			else p.ChangePrototype("mod:Prototypes/Persons/__ Bieberfelde/FFM.e4p");
+			Vehicle pumpe = Game::CreateVehicle(PUMPE, "TP");
+			System::Log(" ~~ Pumpe gespawnt ~~ ");
+			int wasser = 10000; // customize
+			int offset = g.GetUserData();
+			//pumpe.AssignCommand("FOXHabeTauch");
+			wasser = ((135-offset)* wasser)/140;
+			System::Log(" ~~ Wasserstand errechnet %i ~~ ", wasser);
+			g.SetUserData(wasser);
+			pumpe.SetPlacementNone();
+			pumpe.UpdatePlacement();
+			System::Log(" ~~ Pumpe gespawnt 3 ~~ ");
+			pumpe.SetPosition(g.GetPosition() + Vector(0,0,10 + offset));
+			//pumpe.SetPosition(p.GetPosition());
+			pumpe.SetUserData(p.GetUserData());
+			pumpe.PushActionWait(ACTION_APPEND, 0.2f);
+			pumpe.PushActionExecuteCommand(ACTION_APPEND,"ZZ_Schnitt",&pumpe,20,false);
+			pumpe.SetPlayerMP(p.GetPlayerMP());
+			System::Log(" ~~ Pumpe gespawnt 2~~ ");
+			//g.SetUserData(14000);
+			p.PushActionWait(ACTION_APPEND, 1.0f);
+			p.PushActionExecuteCommand(ACTION_APPEND, "FOXUseTauch", Target, -2, false);
+			p.PushActionWait(ACTION_APPEND, 0.25f);
+			p.PushActionUseEquipment(ACTION_APPEND, &pumpe, 0, 1.0f);
+			p.PushActionWait(ACTION_APPEND, 0.25f);
+			p.PushActionExecuteCommand(ACTION_APPEND, "FOXUseTauch", &pumpe, -3, false);
+			p.SetCommandable(false);
+			System::Log("-1");
+		}
+		else if(childID == -2)
+		{
+			System::Log("-2");
+			p.SetCommandable(false);
+			p.SetPlacementNone();
+			p.UpdatePlacement();
+			p.SetEquipment(EQUIP_FIREHOSE);
+			//p.SetPosition(g.GetPosition());
+			p.PushActionWait(ACTION_APPEND, 0.7f);
+		}
+		else if(childID == -3)
+		{
+			System::Log("-3");
+			Vector pos = p.GetPosition();
+			p.AssignCommand("attachfirehose_wv");
+			p.SetPlacement(PLACEMENT_CUSTOM_PLACEMENT);
+			p.UpdatePlacement();
+			Game::FindFreePosition(&p, pos, 500.f);
+			//p.SetPosition(pos);
+			p.PushActionWait(ACTION_APPEND, 0.5f);
+			p.PushActionExecuteCommand(ACTION_APPEND, "FOXUseTauch", Target, -4, false);
+		}
+		else if(childID == -4)
+		{			
+			System::Log("-4");
+			p.SetCommandable(true);
+			if (Game::IsMultiplayer()) ScriptInterface::ShowMessageTickerTextForSinglePlayer(Caller,"FHint_48");
+			else Mission::PlayHint("FHint_48");
+		}
+		else
+		{
+			System::Log(" ~~ User Data %i ~~ ", g.GetUserData());
+			if (g.HasCommand("FOXHabeTauch"))
+			{
+				if (Game::IsMultiplayer()) ScriptInterface::ShowMessageTickerTextForSinglePlayer(Caller,"FHint_47");
+				else Mission::PlayHint("FHint_47");
+				return;
+			}
+			p.PushActionMove(ACTION_NEWLIST, g.GetPosition() + Vector(0,0,10 + g.GetUserData()));
+			p.PushActionTurnTo(ACTION_APPEND, g.GetPosition());
+			p.PushActionSwitchAnim(ACTION_APPEND, "scout_work");
+			p.PushActionWait(ACTION_APPEND, 1.0f);
+			p.PushActionExecuteCommand(ACTION_APPEND, "FOXUseTauch", Target, -1, false);
+		}
+	}
+};
+object FOXTHPENC1: CommandScript
+{
+	void FOXTHPENC1(){}
+	bool CheckTarget(GameObject *Caller, Actor *Target, int childID){return false;}
+	void PushActions(GameObject *Caller, Actor *Target, int childID){}
+};
+object FOXTHPENC2: CommandScript
+{
+	void FOXTHPENC2(){}
+	bool CheckTarget(GameObject *Caller, Actor *Target, int childID){return false;}
+	void PushActions(GameObject *Caller, Actor *Target, int childID){}
+};
+object FOXBIGVEHICLE: CommandScript
+{
+	void FOXBIGVEHICLE(){}
+	bool CheckTarget(GameObject *Caller, Actor *Target, int childID){return false;}
+	void PushActions(GameObject *Caller, Actor *Target, int childID){}
+};
+object FOXBLOCKVEHICLE: CommandScript
+{
+	void FOXBLOCKVEHICLE(){}
+	bool CheckTarget(GameObject *Caller, Actor *Target, int childID){return false;}
+	void PushActions(GameObject *Caller, Actor *Target, int childID){}
+};

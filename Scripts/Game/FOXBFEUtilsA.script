@@ -1,0 +1,847 @@
+Vector eingang; Vector wache; Vector wendep; Vector richtung; Vector parkpos;
+	char AlarmString[7]; char FireResistance[3];
+	int ZUFALL;
+	Person p; Actor eing; Actor fz;
+	int DummyGroup_b = "23";
+class AlarmHelper : CommandScript
+{
+	bool Torcheck(GameObject* Caller)
+	{
+		if (Caller->HasName("10_65_01") || Caller->HasName("10_46_01") || Caller->HasName("01_46_01") || Caller->HasName("01_74_01")  || Caller->HasName("02_44_01") || Caller->HasName("01_56_01")
+				|| Caller->HasName("02_65_01") || Caller->HasName("03_43_01") || Caller->HasName("03_24_01") || Caller->HasName("03_91_01") || Caller->HasName("04_43_01") || Caller->HasName("01_56_01")
+				|| Caller->HasName("04_24_01") || Caller->HasName("30_25_01") || Caller->HasName("04_74_01") || Caller->HasName("21_22_51") || Caller->HasName("21_38_54") || Caller->HasNamePrefix("PP_30") || Caller->HasNamePrefix("19_81"))
+		{
+			return true;
+		}
+		return false;
+	}
+	bool InsideBurg(Vector goal)
+	{
+		ActorList bu = Game::GetActors("FOXP_Burg");
+		if (bu.GetNumActors() > 0)
+		{
+			if (bu.GetActor(0)->IsInsideVirtualObject(goal))
+			{
+				Mission::PlayHint("FHint_13");
+				return true;
+			}
+		}
+		return false;
+	}
+	void AltstadtCheck(GameObject * Caller, Vector goal)
+	{
+		ActorList vo = Game::GetActors("FOXP_Altstadt");
+		Vector start = Caller->GetPosition();
+		ActorList vo2 = Game::GetActors("FOXP_NordOst");
+		//System::Log("FOXMoveCheck");
+		if (vo.GetNumActors() > 0)
+		{
+			if (vo.GetActor(0)->IsInsideVirtualObject(start) && !vo.GetActor(0)->IsInsideVirtualObject(goal))
+			{
+				GameObjectList GO("FOXP_A_EXIT");
+				if (GO.GetNumObjects() > 0)
+				{
+					Caller->PushActionExecuteCommand(ACTION_APPEND, "FoxGenUtils", Caller, 0);
+					Caller->PushActionMove(ACTION_APPEND, GO.GetObject(0)->GetPosition(), true);
+					//Mission::PlayHint("FHint_12");
+				}
+				if (vo2.GetNumActors() > 0)
+				{
+					if (vo2.GetActor(0)->IsInsideVirtualObject(goal))
+					{
+						GameObjectList GO2("FOXP_A_OUTERA");
+						if (GO2.GetNumObjects() > 0)
+						{
+							Caller->PushActionMove(ACTION_APPEND, GO2.GetObject(0)->GetPosition(), true);
+						}
+					}
+				}
+			}
+			if (!vo.GetActor(0)->IsInsideVirtualObject(start) && vo.GetActor(0)->IsInsideVirtualObject(goal))
+			{
+				Caller->PushActionExecuteCommand(ACTION_APPEND, "FoxGenUtils", Caller, 0);
+				if (vo2.GetNumActors() > 0)
+				{
+					if (vo2.GetActor(0)->IsInsideVirtualObject(start))
+					{
+						GameObjectList GO2("FOXP_A_OUTERB");
+						if (GO2.GetNumObjects() > 0)
+						{
+							Caller->PushActionMove(ACTION_APPEND, GO2.GetObject(0)->GetPosition(), true);
+						}
+					}
+				}
+				GameObjectList GO("FOXP_A_ENTRY");
+				if (GO.GetNumObjects() > 0)
+				{
+					Caller->PushActionMove(ACTION_APPEND, GO.GetObject(0)->GetPosition(), true);
+					//Mission::PlayHint("FHint_12");
+				}	
+			}
+		}
+	}
+	void AutobahnFahrtCheck(Vehicle * v, Vector Pos)
+	{
+		for (int k = 1; k <= 2; k++)
+		{
+			char AutobahnName[64];
+			snprintf(AutobahnName, 64, "AUTOBAHN_%i", k);
+			ActorList vo = Game::GetActors(AutobahnName);
+			if(vo.GetNumActors() > 0)
+			{
+				if (vo.GetActor(0)->IsInsideVirtualObject(Pos))
+				{
+					char VOName[64];
+					snprintf(VOName, 64, "B10_Exit_%i", k);
+					ActorList vot = Game::GetActors(VOName);
+					if(vot.GetNumActors() > 0)
+					{	
+						v->PushActionMove(ACTION_APPEND, vot.GetActor(0)->GetPosition());
+					}
+				}
+			}
+		}
+	}
+};	
+object SirDummy : CommandScript
+{
+	SirDummy()
+	{
+	}
+
+	void PushActions(GameObject *Caller, Actor *Target, int childID)
+	{
+		GameObject mDummy(Caller);
+		mDummy.SetUserData(100);
+	}
+};
+
+object civilInOpenHouse : CommandScript
+{
+	civilInOpenHouse()
+	{
+		SetRestrictions(RESTRICT_SELFEXECUTE);
+	}
+
+	bool CheckTarget(GameObject *Caller, Actor *Target, int childID)
+	{
+		return true;
+	}
+
+	void PushActions(GameObject *Caller, Actor *Target, int ChildID)
+	{
+		OpenHouse oh;
+		GameObject mDummy(Caller);
+		int burning = 0;
+		int tmp = 0;
+		int fact = 0;
+		GameObjectList ohlBurning=Game::GetGameObjects(TYPE_OPEN_HOUSE);
+		for(int i=0; i<ohlBurning.GetNumObjects(); i++)
+		{
+   			if (ohlBurning.GetObject(i)->IsBurning())
+   			{
+				burning++;
+				oh = ohlBurning.GetObject(i);
+  		 		PersonList plsInside = oh.GetNonSquadPersonsInside();
+   				for (int n=0; n<plsInside.GetNumPersons(); n++)
+				{
+					tmp = plsInside.GetPerson(n)->GetHealth()/2;
+            		if (plsInside.GetPerson(n)->GetHealth() > 251.f)
+					{
+						 fact = Math::rand()%tmp+20;
+               					 plsInside.GetPerson(n)->SetHealth((tmp*2) - (fact*0.90f));
+					}
+					else if(!plsInside.GetPerson(n)->IsInjured())
+					{
+						plsInside.GetPerson(n)->Injure(INJUREREASON_FIRE, false);
+						plsInside.GetPerson(n)->SetLife(Math::rand()%200+800);
+						plsInside.GetPerson(n)->SetInjuredLifeDrain(plsInside.GetPerson(n)->GetInjuredLifeDrain()*0.4f);
+					}	
+				}
+   			}
+		}
+		mDummy.PushActionWait(ACTION_NEWLIST, Math::rand()%50+20);
+		mDummy.PushActionExecuteCommand(ACTION_APPEND, "civilInOpenHouse", &mDummy, 0, false);
+	}
+};
+
+
+object GF_Absitzen : CommandScript
+{
+
+	GF_Absitzen()
+	{
+		SetIcon("gf");
+		SetCursor("gf");
+		SetValidTargets(ACTOR_VEHICLE);
+		SetDoubleClickable(true);
+		SetRestrictions(RESTRICT_SELFEXECUTE);
+		SetPriority(100);
+	}
+
+	bool CheckPossible(GameObject *Caller)
+	{
+		if (!Caller->IsValid() || Caller->GetType() != ACTOR_VEHICLE)
+			return false;
+		Vehicle v(Caller);
+		if(v.HasCommand("FlyTo") && !v.IsOnGround())
+			return false;
+		return v.GetNumPassengers() > 0;
+	}
+
+	bool CheckTarget(GameObject *Caller, Actor *Target, int childID)
+	{
+		if(!Caller->IsValid() || !Target->IsValid())
+			return false;
+		
+		if(Caller->GetType()==ACTOR_VEHICLE && Target->GetType()==ACTOR_VEHICLE && Caller->GetID()==Target->GetID())
+		{
+			Vehicle v(Caller);
+			if (!v.IsValid() ||  v.IsDestroyed())
+			        return false;
+			if(v.HasCommand("FlyTo") && !v.IsOnGround())
+				return false;		
+			if(v.GetNumPassengers() > 0)
+				return true;
+		}
+				
+		return false;
+	}
+
+	void PushActions(GameObject *Caller, Actor *Target, int childID)
+	{
+		Vehicle v(Caller);
+		v.PushActionExecuteCommand(ACTION_NEWLIST, "EmptyCar", &v, 38, false);
+	}
+};
+
+//
+// VCmdDebug
+//
+
+object PCmDExAll : CommandScript 
+{
+	PCmDExAll()
+	{
+		SetIcon("Debug"); //Icon
+		SetRestrictions(RESTRICT_SELFEXECUTE);
+		SetGroupID(CGROUP_GETEQUIPMENT);
+	}
+	bool CheckPossible(GameObject *Caller)
+	{
+		return Input::LCtrlPressed();
+	}
+	bool CheckTarget(GameObject *Caller, Actor *Target, int childID)
+	{
+		if(!Caller->IsValid() || !Target->IsValid() || Caller->GetID() != Target->GetID())
+			return false;
+		return true;
+	}
+	void PushActions(GameObject *Caller, Actor *Target, int childID)
+	{
+		GameObjectList objs=Game::GetGameObjects();
+		for(int i=0;i<objs.GetNumObjects();i++){
+			if(objs.GetObject(i)->IsBurning()){
+				GameObject obj(objs.GetObject(i));
+				int length=obj.GetNumFireChilds();
+				for(int j=0;j<length;j++){
+					obj.GetFireChild(j).Stop();
+				}
+			}
+		}
+	}
+};
+object PCmDEndGame : CommandScript 
+{
+	PCmDEndGame()
+	{
+		SetIcon("Debug"); //Icon
+		SetRestrictions(RESTRICT_SELFEXECUTE);
+		SetGroupID(CGROUP_GETEQUIPMENT);
+	}
+	bool CheckTarget(GameObject *Caller, Actor *Target, int childID)
+	{
+		if(!Caller->IsValid() || !Target->IsValid() || Caller->GetID() != Target->GetID())
+			return false;
+		return true;
+	}
+	void PushActions(GameObject *Caller, Actor *Target, int childID)
+	{
+		Caller->AssignCommand("ZZ_PCmDEndGame");
+	}
+};
+object ZZ_PCmDEndGame : CommandScript 
+{
+	ZZ_PCmDEndGame()
+	{
+		SetIcon("Debug"); //Icon
+		SetRestrictions(RESTRICT_SELFEXECUTE);
+		SetGroupID(CGROUP_GETEQUIPMENT);
+	}
+	bool CheckPossible(GameObject *Caller){
+		GameObjectList ol;
+		GameObject *o;
+		ol = Game::GetGameObjects("Stadtfeld_43");
+		o = *ol.GetObject(0);
+		Vehicle v(o);
+		return true;
+	}
+	bool CheckTarget(GameObject *Caller, Actor *Target, int childID)
+	{
+		if(!Caller->IsValid() || !Target->IsValid() || Caller->GetID() != Target->GetID())
+			return false;
+		return true;
+	}
+	void PushActions(GameObject *Caller, Actor *Target, int childID)
+	{
+	}
+};
+object PCmDDelAll : CommandScript 
+{
+	PCmDDelAll()
+	{
+		SetIcon("Debug"); //Icon
+		SetRestrictions(RESTRICT_SELFEXECUTE);
+		SetGroupID(CGROUP_GETEQUIPMENT);
+	}
+	bool CheckPossible(GameObject *Caller)
+	{
+		return Input::LCtrlPressed();
+	}
+	bool CheckTarget(GameObject *Caller, Actor *Target, int childID)
+	{
+		if(!Caller->IsValid() || !Target->IsValid() || Caller->GetID() != Target->GetID())
+			return false;
+		return true;
+	}
+	void PushActions(GameObject *Caller, Actor *Target, int ChildID)
+	{
+		VehicleList vl(VT_NOSQUAD,VT_NOSQUAD);
+		for(int i=0;i<vl.GetNumVehicles();i++){
+			if(vl.GetVehicle(i)->IsCurrentAction("EActionMove")){
+				vl.GetVehicle(i)->PushActionDeleteOwner(ACTION_NEWLIST);
+			}
+		}
+	}
+};
+
+
+
+//
+// FMS
+//
+
+object FMS : CommandScript
+{
+	FMS()
+	{
+	}
+
+	bool CheckPossible(GameObject *Caller)
+	{
+		return true;
+	}
+
+	bool CheckTarget(GameObject *Caller, Actor *Target, int childID)
+	{
+		return true;
+	}
+
+	void PushActions(GameObject *Caller, Actor *Target, int childID)
+	{
+		//System::Log(" ~~ FMS");
+		//int soundID = Math::rand()% 10;
+		switch(childID)
+		{
+			case 1:
+			{
+				Audio::PlaySample("mod:/Audio/FX/Fuchsburg/Stati/Status_2.wav");
+				break;
+			}
+			case 2:
+			{
+				Audio::PlaySample("mod:/Audio/FX/Fuchsburg/Stati/Status_3.wav");
+				break;
+			}
+			case 3:
+			{
+				Audio::PlaySample("mod:/Audio/FX/Fuchsburg/Stati/Status_4.wav");
+				break;
+			}
+			case 4:
+			{
+				Audio::PlaySample("mod:/Audio/FX/Fuchsburg/Stati/Status_5.wav");
+				break;
+			}
+			case 5:
+			{
+				Audio::PlaySample("mod:/Audio/FX/Fuchsburg/Stati/Stati.wav");
+				break;
+			}
+			case 6:
+			{
+				Audio::PlaySample("mod:/Audio/FX/Fuchsburg/Stati/Stati.wav");
+				break;
+			}
+			case 12:
+			case 7:
+			case 8:
+			case 9:
+				Audio::PlaySample("mod:/Audio/FX/Fuchsburg/Stati/Stati.wav");
+				break;
+			case 11:
+			case 10:
+			case 0:
+			break;
+			default:
+			{
+				Audio::PlaySample("mod:/Audio/FX/Fuchsburg/Stati/Stati.wav");
+			}
+			break;
+		}
+
+		char status_anzeige[128];
+		char veh[64];
+		Game::GetGameString(Caller->GetName(), veh, 64);
+		snprintf(status_anzeige, 128, childID<10?"%s --%i--":"%s --%s--", veh, childID<10?childID:(childID==10?"0":(childID==11?"0":"6")));
+		System::Log(status_anzeige);				
+		
+		if (!Game::IsMultiplayer())
+			Game::ShowHelpTextWindow(status_anzeige);
+		
+	}
+};
+object ABC_erkunden : CommandScript
+{
+	ABC_erkunden()
+	{ }
+
+	bool CheckPossible(GameObject *Caller)
+	{
+		return true;
+	}
+
+	bool CheckTarget(GameObject *Caller, Actor *Target, int childID)
+	{
+		return Target->GetType()==ACTOR_FLOOR||Target->GetType()==ACTOR_STREET;
+	}
+
+	void PushActions(GameObject *Caller, Actor *Target, int childID)
+	{
+		if(childID==0){
+			Caller->PushActionMove(ACTION_NEWLIST,Game::GetCommandPos());
+			Caller->PushActionSwitchAnim(ACTION_APPEND,"hostage_down");
+			Caller->PushActionExecuteCommand(ACTION_APPEND,"ABC_erkunden",Target,1,false);
+		}else if(childID==1){
+			Mission::PlayHint("BHint_29");
+		}
+	}
+};
+object aufsitzen : CommandScript
+{
+	aufsitzen()
+	{ }
+
+	bool CheckPossible(GameObject *Caller)
+	{
+		return true;
+	}
+
+	bool CheckTarget(GameObject *Caller, Actor *Target, int childID)
+	{
+		return true;
+	}
+
+	void PushActions(GameObject *Caller, Actor *Target, int childID)
+	{
+		Person p;
+		Vehicle v(Caller);
+		bool pinbasket = false;
+
+		if(v.GetVehicleType() == VT_THW_FGRR_BKF && v.IsInstalled())
+			v.PushActionDeinstall(ACTION_APPEND);
+		
+
+		PersonList l2(Caller->GetName());
+
+		for(int i = 0; i < l2.GetNumPersons(); i++)
+		{
+			if (!l2.GetPerson(i)->IsInjured() && !l2.GetPerson(i)->IsDead() && !l2.GetPerson(i)->IsHidden() && !l2.GetPerson(i)->IsRescueDog() && !l2.GetPerson(i)->HasAnimation("bark"))
+			{
+				p = *l2.GetPerson(i);
+				p.SetCommandable(true);
+
+				if(p.GetPersonType() == PT_POLICEMEN && p.IsLinkedWithPerson())
+				{
+					p.GetArrested().SetUserData(-666);
+					p.PushActionMove(ACTION_NEWLIST, &v, TARGET_ANY);
+					p.PushActionTurnTo(ACTION_APPEND, &v);
+					p.PushActionPutInCar(ACTION_APPEND, &v);
+					p.PushActionExecuteCommand(ACTION_APPEND,"entercar",&v,1,false);
+				} else if(v.GetVehicleType() == VT_FIREFIGHTERS_DLK && v.IsUplifted() && p.IsInDLKBasket())
+				{
+					pinbasket = true;
+					v.PushActionBasketDown(ACTION_APPEND, Vector(0.f, 0.f, 0.f));
+					v.PushActionExecuteCommand(ACTION_APPEND, "einsteigen", &p, 0, false);
+					v.PushActionDeinstall(ACTION_APPEND);
+					v.PushActionWait(ACTION_APPEND, 3.0f);
+					v.PlayAnimCloseDoor(DAT_SPECIAL, 3.0f, Caller);
+				} else if(v.GetVehicleType() == VT_FIREFIGHTERS_DLK && v.IsInstalled() && !p.IsInDLKBasket() && !pinbasket)
+				{
+					v.PushActionBasketDown(ACTION_APPEND, Vector(0.f, 0.f, 0.f));
+					v.PushActionDeinstall(ACTION_APPEND);
+					v.PushActionWait(ACTION_APPEND, 3.0f);
+					v.PlayAnimCloseDoor(DAT_SPECIAL, 3.0f, Caller);
+				} else if(p.GetEquipment()==EQUIP_FIREHOSE && p.GetFirehoseID() != 0){
+					p.PushActionExecuteCommand(ACTION_NEWLIST, "RemoveFirehose", Caller, 1);
+				} else if (p.HasCommand("DLKDummyBasket"))
+				{
+					p.PushActionWait(ACTION_NEWLIST, 0.1f);
+				}else if(v.IsFirefighter() && (p.IsCarryingPerson() || p.IsCarryingContaminatedPerson()))
+				{
+					p.PushActionUnloadPerson(ACTION_NEWLIST);
+					p.PushActionMove(ACTION_APPEND, &v, TARGET_PASSENGERDOOR);
+					p.PushActionTurnTo(ACTION_APPEND, &v);
+					p.PushActionEnterCar(ACTION_APPEND, &v);
+				} else if(v.IsFirefighter() && (p.IsLinkedWithPerson() || p.IsLinkedWithContaminatedPerson()))
+				{
+					p.PushActionRelease(ACTION_NEWLIST);
+					p.PushActionMove(ACTION_APPEND, &v, TARGET_PASSENGERDOOR);
+					p.PushActionTurnTo(ACTION_APPEND, &v);
+					p.PushActionEnterCar(ACTION_APPEND, &v);
+				} else if(p.GetPersonType() == PT_PARAMEDIC && p.IsCurrentAction("EActionTreatPerson"))
+				{
+					GameObjectList l4;
+
+					l4 = p.GetObjectsInRange(5,ACTOR_PERSON);
+					for (int j=0;j<l4.GetNumObjects();j++)
+					{
+						Person pat(l4.GetObject(j));
+						if (pat.IsInjured() && !pat.IsCarried())
+						{
+							p.PushActionExecuteCommand(ACTION_NEWLIST, "Lift", &pat, 1, false);
+							p.PushActionExecuteCommand(ACTION_APPEND,"entercar",&v,1,false);
+						}
+					}
+				} else if((p.GetPersonType() == PT_FIREFIGHTER_NORMAL || p.GetPersonType() == PT_FIREFIGHTER_MASK || p.GetPersonType() == PT_FIREFIGHTER_ABC) && p.IsEquipped())
+				{
+					p.PushActionMove(ACTION_NEWLIST, &v, TARGET_EQUIPMENTDOOR);
+					p.PushActionTurnTo(ACTION_APPEND, &v);
+					p.PushActionRemoveEquipment(ACTION_APPEND);
+					p.PushActionMove(ACTION_APPEND, &v, TARGET_PASSENGERDOOR);
+					p.PushActionTurnTo(ACTION_APPEND, &v);
+					p.PushActionEnterCar(ACTION_APPEND, &v);
+				} else
+				{
+					p.PushActionMove(ACTION_NEWLIST, &v, TARGET_PASSENGERDOOR);
+					p.PushActionTurnTo(ACTION_APPEND, &v);
+					p.PushActionEnterCar(ACTION_APPEND, &v);
+				}
+			}
+		}
+	}
+};
+
+object einsteigen : CommandScript
+{
+	einsteigen()
+	{ }
+
+	bool CheckPossible(GameObject *Caller)
+	{
+		return true;
+	}
+
+	bool CheckTarget(GameObject *Caller, Actor *Target, int childID)
+	{
+		return true;
+	}
+
+	void PushActions(GameObject *Caller, Actor *Target, int childID)
+	{
+		Vehicle v(Caller);
+		Person p(Target);
+		p.PushActionMove(ACTION_APPEND, &v, TARGET_PASSENGERDOOR);
+		p.PushActionTurnTo(ACTION_APPEND, &v);
+		p.PushActionEnterCar(ACTION_APPEND, &v);
+	}
+};
+
+object fahrzeug_voll : CommandScript
+{
+	fahrzeug_voll()
+	{ }
+
+	bool CheckPossible(GameObject *Caller)
+	{
+		return true;
+	}
+
+	bool CheckTarget(GameObject *Caller, Actor *Target, int childID)
+	{
+		return true;
+	}
+
+	void PushActions(GameObject *Caller, Actor *Target, int childID)
+	{
+		Vehicle v(Caller);
+		int x = 0;
+		PersonList pl(v.GetName());
+		if(v.GetNumPassengers() == x)
+		{
+			if(childID == 1) v.PushActionExecuteCommand(ACTION_APPEND, "VCmDWache", &v, 0, false);
+		} else
+		{
+			v.PushActionWait(ACTION_APPEND, 5.0f);
+			v.PushActionExecuteCommand(ACTION_APPEND, "fahrzeug_voll", Target, childID, false);
+		}
+	}
+};
+
+object goHome_pfs : CommandScript
+{
+	goHome_pfs()
+	{
+		SetValidTargets(ACTOR_VEHICLE);
+		SetRestrictions(RESTRICT_SELFEXECUTE);
+		SetIcon("aufsitzen");
+		SetPriority(85);
+	}
+
+	bool CheckPossible(GameObject *Caller)
+	{
+		if (Caller->HasCommand("TrailerToStation")) return false;
+		return true;
+	}
+
+	bool CheckTarget(GameObject *Caller, Actor *Target, int ChildID)
+	{
+		if (!Caller->IsValid() || !Target->IsValid() || Target->GetID() != Caller->GetID() || Caller->GetType() != ACTOR_VEHICLE)
+			return false;
+		return true;
+	}
+
+	void PushActions(GameObject *Caller, Actor *Target, int childID)
+	{
+		Vehicle v(Caller);
+		if (v.GetVehicleType() == VT_AMBULANCE_RTW)
+		{
+			if (v.GetNumTransported() > 0)
+				return;
+		}
+		if (Caller->HasCommand("DropTrailer"))
+		{
+			if (!Caller->HasName("16_93_01") || !Caller->IsChildEnabled("16_94_01_boot")) {
+				ScriptInterface::ShowMessageTickerTextForSinglePlayer(Caller,"FHint_40");
+				return;
+			}
+		}
+		if (Caller->HasName("16_93_01"))
+		{
+			VehicleList boot("16_94_01");
+			if (boot.GetNumVehicles() > 0)
+			{
+				Mission::PlayHint("FHint_23");
+				return;
+			}
+		}
+		// Remove Maker
+		char makerName[32];
+		snprintf(makerName, 32, "maker_%i", v.GetID());
+		GameObjectList ol1 = Game::GetGameObjects(makerName);
+		for (int i = 0; i < ol1.GetNumObjects(); i++)
+		{
+			ol1.GetObject(i)->PushActionDeleteOwner(ACTION_NEWLIST);
+		}
+
+		//Check Klinik
+		/*PersonList tl=v.GetTransports();
+		for(int i=0;i<tl.GetNumPersons();i++){
+			if(tl.GetPerson(i)->IsInjured()){
+				v.PushActionExecuteCommand(ACTION_NEWLIST,"VCmdHospital",Caller,childID,true);
+				return;
+			}
+		}*/
+		//END Check Klinik
+		ActorList l1;
+
+		l1 = Game::GetActors(Caller->GetName());
+		//v.PushActionWait(ACTION_NEWLIST, 0.5f);		
+		if (v.IsBlueLightEnabled())
+ 		{
+			int ref = Caller->GetUserData();
+			Audio::StopSample(ref);
+ 			if (v.IsBlueLightEnabled()) v.PushActionExecuteCommand(ACTION_APPEND, "VCmdBlue", &v, 0, false);
+ 		}
+ 		v.EnableBlinker(BLT_NONE);
+		for(int i = 0; i < l1.GetNumActors(); i++)
+		{
+			if (l1.GetActor(i)->GetType() == ACTOR_VIRTUAL) fz = *l1.GetActor(i);
+		}	
+		wache=fz.GetPosition();	
+		if ( Caller->HasName("02_65_01") 
+			|| Caller->HasName("AB_WASSER")  || Caller->HasName("14_81_01") 
+			|| Caller->HasName("PP_10_07") || Caller->HasName("PP_10_08") || Caller->HasName("PP_10_11") || Caller->HasName("PP_10_12")|| Caller->HasName("PP_10_13")
+			|| Caller->HasName("PP_10_09") 
+			||  Caller->HasName("02_44_01")  || Caller->HasName("02_19_01")		
+			|| Caller->HasName("PP_20_01") || Caller->HasName("PP_20_02")|| Caller->HasName("13_83_01") || v.HasName("13_85_01"))
+		{
+			wendep = wache + Vector(0,-500,0);	
+			richtung = wendep + Vector(0,-8000,0);
+		}
+		
+		if (Caller->HasName("BS_01_01")  )
+		{
+			wendep = wache + Vector(172,133,0);
+			richtung = wendep + Vector(4450,5750,0);
+		}
+		if (Caller->HasName("12_83_02") || Caller->HasName("12_82_01") ||Caller->HasName("12_83_01")|| Caller->HasName("12_85_01") )
+		{
+			wendep = wache + Vector(-360,-400,0);	
+			richtung = wendep + Vector(-7170,-8000,0);
+		}
+		 if (Caller->HasName("01_19_01") || Caller->HasName("10_65_01") || Caller->HasName("21_22_51") || Caller->HasName("21_38_54") || Caller->HasName("21_21_10") || Caller->HasName("10_40_01")|| Caller->HasName("01_56_01") || Caller->HasName("10_33_01")
+			  
+			 || Caller->HasName("PP_10_06")  || Caller->HasName("PP_40_01") || Caller->HasName("01_42_01")|| Caller->HasName("04_74_01")|| Caller->HasName("01_74_01") || Caller->HasName("01_58_01") 
+		 	|| Caller->HasName("01_11_01") ||Caller->HasName("11_87_01")|| Caller->HasName("11_85_01")|| Caller->HasName("10_10_01")||Caller->HasName("01_46_01") || Caller->HasName("01_33_01") || Caller->HasName("10_46_01"))
+		{
+			wendep = wache + Vector(0,500,0);	
+			richtung = wendep + Vector(0,8000,0);
+		}
+		if (Caller->HasName("03_43_01") || Caller->HasName("03_91_01") || Caller->HasName("03_24_01") || Caller->HasName("03_14_01")
+			|| Caller->HasName("14_82_01")|| Caller->HasName("14_83_01")|| Caller->HasName("14_83_02")|| Caller->HasName("14_85_01")
+			|| Caller->HasName("04_14_01") || Caller->HasName("04_43_01")||Caller->HasName("06_47_01") || Caller->HasName("04_24_01")
+		 	|| Caller->HasName("05_62_01")|| Caller->HasName("18_28_01")|| Caller->HasName("18_26_01") || Caller->HasName("18_26_02") 
+		 	|| Caller->HasName("18_11_01")|| Caller->HasName("15_19_01") || Caller->HasName("15_38_01") || Caller->HasName("PP_30_04") || Caller->HasName("PP_30_01") )
+		{
+			wendep = wache + Vector(0,500,0);	
+			richtung = wendep + Vector(0,8000,0);
+		}
+		 if (Caller->HasName("06_10_01")    || Caller->HasName("06_23_01")
+			 || Caller->HasName("20_82_01") || Caller->HasName("20_83_01")
+			 || Caller->HasName("KR_01_01") || Caller->HasName("19_82_01") 
+			 || Caller->HasName("19_83_01") || Caller->HasName("19_81_01")
+			 || Caller->HasName("13_82_01") )		
+		{
+			wendep = wache + Vector(-400,0,0);	
+			richtung = wendep + Vector(-8000,0,0);
+		}
+		if ( Caller->HasName("17_82_01")
+			 || Caller->HasName("PP_20_03") || Caller->HasName("20_83_02") 
+			 || Caller->HasName("30_25_01") || Caller->HasName("30_10_01")  
+			 || Caller->HasName("00_99_01") || Caller->HasName("16_19_01")
+			 || Caller->HasName("16_93_01"))
+		{
+			wendep = wache + Vector(-400,0,0);	
+			richtung = wendep + Vector(-8000,0,0);
+		}
+		 if (Caller->HasName("05_19_01")|| Caller->HasName("11_83_03") ||Caller->HasName("05_42_01") ||Caller->HasName("01_10_01")  
+			 || Caller->HasName("11_83_01")  || Caller->HasName("11_82_01")  || Caller->HasName("AB_MANV")|| Caller->HasName("AB_WASSER") || Caller->HasName("AB_MULDE") || Caller->HasName("AB_AS") ||  Caller->HasName("AB_DEKON") || Caller->HasName("PP_10_03")
+			 || Caller->HasName("PP_10_02")|| Caller->HasName("PP_10_01") || Caller->HasName("PP_10_04")  || Caller->HasName("PP_30_02") || Caller->HasName("PP_30_03")
+			 || Caller->HasName("PP_30_07") || Caller->HasName("PP_30_06") || Caller->HasName("PP_10_10")|| Caller->HasName("11_83_02") )		
+		{
+			wendep = wache + Vector(400,0,0);	
+			richtung = wendep + Vector(8000,0,0);
+		}
+		Game::FindFreePosition(Caller,wendep,50);
+		v.PushActionExecuteCommand(ACTION_APPEND, "FOXGSteuerung", &v, 99);
+		if (v.HasCommand("KRA")) Game::ExecuteCommand("VCmdWarnAb", &v);
+		Audio::StopSample(v.GetUserData());				
+		if (v.IsSpecialLightEnabled()) v.EnableSpecialLights(false);
+		if(v.GetUserData() == 6)
+			v.PushActionExecuteCommand(ACTION_APPEND, "FMS", Caller, 6, false);	
+		else
+			v.PushActionExecuteCommand(ACTION_APPEND, "FMS", Caller, 1, false);
+		if(!v.HasNamePrefix("40_"))
+		{
+			//Geschwindigkeit anpassen
+			char speeds[10];	
+			Game::GetGameString("civilspeed", speeds, 10);
+			float speed = Math::atof(speeds); 
+			v.SetSpeed(speed);
+			if (v.GetUserData() != 6) v.PushActionExecuteCommand(ACTION_APPEND, "FOXFreeToCall");
+			if (AlarmHelper::Torcheck(Caller)) AlarmHelper::AltstadtCheck(Caller, wache);
+			AlarmHelper::AutobahnFahrtCheck(&v, v.GetPosition());
+			v.PushActionMove(ACTION_APPEND,wendep);
+			v.PushActionTurnTo(ACTION_APPEND, richtung);
+			v.PushActionExecuteCommand(ACTION_APPEND,"COMMANDOSPERRE",Caller,0,true);
+			v.PushActionWait(ACTION_APPEND, 2.5f);
+			if (v.HasCommand("TOR_H")) v.PushActionExecuteCommand(ACTION_APPEND,"OpenGateH",Caller,0,true);
+			v.PushActionExecuteCommand(ACTION_APPEND,"OpenGate",Caller,0,true);
+			v.PushActionWait(ACTION_APPEND, 2.5f);
+			if(v.HasChild("WARN") && !v.HasCommand("TOR_H")) v.PushActionExecuteCommand(ACTION_APPEND,"SOUND_PLAYER",Caller,4,true);
+		}
+		if(!v.HasNamePrefix("40_"))
+		{
+			
+			v.PushActionMove(ACTION_APPEND,wache);
+			// Set Move Point
+			/*
+			char target[255];
+			snprintf(target, 255 , "moveTarget_%i", v.GetID());
+			GameObjectList G = Game::GetGameObjects(target);
+			if (G.GetNumObjects() > 0)
+			{
+				GameObject T = G.GetObject(0);
+			}
+			else GameObject T = Game::CreateObject("mod:Prototypes/Objects/Misc/MoveTarget.e4p", target);
+			T.SetPosition(wache);
+			*/
+		}
+		else
+		{
+			if (v.HasName("40_84_01"))
+			{
+				v.PushActionFlyTo(ACTION_APPEND, wache + Vector(-500,-500,0), false, -1.0f);
+				GameObjectList tar("HELIPAD");
+				v.PushActionExecuteCommand(ACTION_APPEND, "COMMANDOSPERRE", &v);
+				// v.PushActionMoveToPoint(ACTION_APPEND, tar.GetObject(0), v.GetSpeed());
+				if (tar.GetNumObjects() > 0) v.PushActionFlyTo(ACTION_APPEND, tar.GetObject(0)->GetPosition(), true, -1.0f);
+				v.PushActionSwitchAnim(ACTION_APPEND, "stop");
+				v.PushActionWait(ACTION_APPEND, 1.5f);
+				v.PushActionExecuteCommand(ACTION_APPEND, "EmptyCar", &v, 42, false);
+				v.PushActionWait(ACTION_APPEND, 18.5f);
+			}
+			else v.PushActionFlyTo(ACTION_APPEND, wache, true, -1.0f);
+			v.PushActionExecuteCommand(ACTION_APPEND, "VCmdDebug", &v, 5, false);
+			return;
+		}
+		//v.PushActionWait(ACTION_APPEND, 2.5f);
+		v.PushActionExecuteCommand(ACTION_APPEND,"GoWache",Caller,0,true);
+		v.PushActionTurnTo(ACTION_APPEND, richtung);
+		if(v.HasChild("BRAKE")) v.PushActionExecuteCommand(ACTION_APPEND,"SOUND_PLAYER",Caller,1,true);
+		v.PushActionExecuteCommand(ACTION_APPEND,"ActionEmptyPF",Caller,childID,true);
+		v.PushActionWait(ACTION_APPEND, 3.0f);
+		v.PushActionExecuteCommand(ACTION_APPEND,"ActionEmptyPF",Caller,childID,true);
+		v.PushActionWait(ACTION_APPEND, 0.5f);
+		if(v.GetUserData() != 6)
+			v.PushActionExecuteCommand(ACTION_APPEND, "FMS", Caller, 2, false);
+		v.PushActionExecuteCommand(ACTION_APPEND,"LIGHTS",Caller,1,true);
+		v.PushActionWait(ACTION_APPEND, 1.5f);
+		if (v.HasCommand("TOR_H")) v.PushActionExecuteCommand(ACTION_APPEND,"CloseGateH",Caller,0,true);
+		v.PushActionExecuteCommand(ACTION_APPEND,"CloseGate",Caller,0,true);
+		v.PushActionWait(ACTION_APPEND, 1.0f);
+		if(v.GetUserData() == 6)
+		{
+			v.PushActionWait(ACTION_APPEND, Math::rand() % 200+100);
+			v.PushActionExecuteCommand(ACTION_APPEND, "Desi_Startklar", &v, 0, false);
+			return;
+		}
+		if (Caller->HasName("05_19_01") ||Caller->HasName("04_14_01") || Caller->HasName("04_24_01") || Caller->HasName("04_43_01") || Caller->HasName("04_74_01")
+		 || Caller->HasName("06_10_01") || Caller->HasName("06_23_01") || Caller->HasName("05_42_01") || Caller->HasName("06_47_01") || Caller->HasName("19_82_01") 
+		 || Caller->HasName("13_82_01") || Caller->HasName("13_83_01") || Caller->HasName("13_83_02") || Caller->HasName("20_82_01") || Caller->HasName("14_81_01")
+ 		 || Caller->HasName("14_82_01") || Caller->HasName("14_83_01")|| Caller->HasName("14_83_02")|| Caller->HasName("14_85_01")
+ 		 || Caller->HasName("20_83_01") || Caller->HasName("20_83_02") || Caller->HasName("30_25_01") || Caller->HasName("30_10_01")
+		 || Caller->HasName("PP_30_01") || Caller->HasName("PP_30_02") || Caller->HasName("PP_30_03") || Caller->HasName("PP_30_04")
+		 || Caller->HasName("PP_30_06") || Caller->HasName("PP_30_07") || Caller->HasName("PP_10_10") || Caller->HasName("13_85_01") || Caller->HasName("15_19_01") || Caller->HasName("15_38_01"))
+		{
+			Caller->EnableHeadLights(true);
+		}
+		v.PushActionExecuteCommand(ACTION_APPEND,"GetBindemittel",&v,402,false);
+		v.PushActionExecuteCommand(ACTION_APPEND, "ZZ_Schnitt", &v, 202, false);
+		v.PushActionExecuteCommand(ACTION_APPEND,"COMMANDOSPERRE",Caller,1,true);
+		v.PushActionExecuteCommand(ACTION_APPEND,"END_ALARM",Caller,0,true);
+	}
+};
+
+

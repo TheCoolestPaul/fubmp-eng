@@ -1,0 +1,608 @@
+<strings>
+<!-- Diverse Strings -->
+<string name="TESTSTRING">CreatePerson, ERROR, Patrol CommandScript: Cannot find base!</string>
+<string name="ALARM_TEXT">Vehicle alerted</string>
+
+<!-- Personen Flammenresistenz -->
+<string name="RESISTANCE_FWM_FIRE">6</string>  <!-- Feuerwehrleute --> 
+<string name="RESISTANCE_AGT_FIRE">300</string>  <!-- Atemschutzger�tetr�ger --> 
+<string name="RESISTANCE_ZIV_FIRE">2</string>  	<!-- 40 Zivilpersonen --> 
+<string name="RESISTANCE_MEK_SHOT">160</string>  	<!-- MEK --> 
+
+<!-- Arbeits / Alarmierungszeiten [outdated] -->
+<string name="SHEARS_TIME">70</string>				<!-- Arbeitszeit Schere / Spreizer --> 
+<string name="FF1_ATIME">35</string>				<!-- Alarmzeit FF 1--> 
+<string name="FF2_ATIME">40</string>				<!-- Alarmzeit FF 2--> 
+<string name="FF3_ATIME">50</string>				<!-- Alarmzeit FF 3--> 
+<string name="FF4_ATIME">65</string>				<!-- Alarmzeit FF 4--> 
+<string name="FF5_ATIME">75</string>				<!-- Alarmzeit FF 5--> 
+
+<!-- Personal alle 10s - div by 10 -->
+<string name="01_DAY">10</string>
+<string name="01_NIGHT">15</string>	
+
+<string name="02_DAY">15</string>
+<string name="02_NIGHT">21</string>
+
+<string name="03_DAY">13</string>
+<string name="03_NIGHT">21</string>
+
+<string name="16_DAY">6</string>
+<string name="16_NIGHT">8</string>
+
+<string name="18_DAY">6</string>
+<string name="18_NIGHT">8</string>
+
+<string name="21_DAY">6</string>
+<string name="21_NIGHT">10</string>
+
+<!-- Anfahrtszeiten -->
+<string name="04_ATIME">200</string> <!-- eigentlich 250-->
+<string name="05_ATIME">180</string> <!-- eigentlich 200-->
+<string name="06_ATIME">230</string>
+<string name="13_ATIME">50</string>
+<string name="14_ATIME">160</string>
+<string name="19_ATIME">240</string> <!-- eigentlich 240-->
+<string name="20_ATIME">180</string>
+<string name="PP_ATIME">140</string> <!-- Alarmzeit BEPO--> 
+<string name="KR_ATIME">260</string> <!-- Alarmzeit KMBD--> 
+
+
+<!-- Fahrzeugkosten -->
+<string name="01_11_01_Kosten">80000</string>
+<string name="01_46_01_Kosten">350000</string>
+<string name="02_11_01_Kosten">80000</string>
+<string name="02_46_01_Kosten">350000</string>
+<string name="03_44_01_Kosten">360000</string>
+<string name="03_45_01_Kosten">250000</string>
+<string name="03_65_01_Kosten">400000</string>
+<string name="PP_10_09_Kosten">50000</string>
+
+<!-- Geschwindigkeit -->
+<string name="civilspeed">6.0</string>
+<string name="carspeed">10</string>
+<string name="vanspeed">9.5</string>
+<string name="truckspeed">8.5</string>
+
+<string name="10_10_01_speed">carspeed</string>
+<string name="10_40_01_speed">vanspeed</string>
+<string name="10_33_01_speed">truckspeed</string>
+<string name="10_46_01_speed">truckspeed</string>
+<string name="10_65_01_speed">truckspeed</string>
+<string name="01_11_01_speed">vanspeed</string>
+<string name="01_33_01_speed">truckspeed</string>
+<string name="01_46_01_speed">truckspeed</string>
+<string name="01_42_01_speed">truckspeed</string>
+<string name="01_72_01_speed">truckspeed</string>
+<string name="01_58_01_speed">truckspeed</string>
+<string name="01_74_01_speed">truckspeed</string>
+<string name="01_56_01_speed">truckspeed</string>
+<string name="01_19_01_speed">vanspeed</string>
+<string name="02_44_01_speed">truckspeed</string>
+<string name="02_19_01_speed">vanspeed</string>
+<string name="02_52_01_speed">truckspeed</string>
+<string name="02_65_01_speed">truckspeed</string>
+<string name="03_14_01_speed">vanspeed</string>
+<string name="03_24_01_speed">truckspeed</string>
+<string name="03_43_01_speed">truckspeed</string>
+<string name="03_91_01_speed">truckspeed</string>
+<string name="04_14_01_speed">vanspeed</string>
+<string name="04_24_01_speed">truckspeed</string>
+<string name="04_43_01_speed">truckspeed</string>
+<string name="04_74_01_speed">truckspeed</string>
+<string name="05_42_01_speed">truckspeed</string>
+<string name="05_19_01_speed">vanspeed</string>
+<string name="06_47_01_speed">vanspeed</string>
+<string name="11_82_01_speed">carspeed</string>
+<string name="11_83_01_speed">vanspeed</string>
+<string name="11_83_02_speed">vanspeed</string>
+<string name="11_83_03_speed">vanspeed</string>
+<string name="11_87_01_speed">truckspeed</string>
+<string name="11_85_01_speed">vanspeed</string>
+<string name="12_82_01_speed">carspeed</string>
+<string name="12_83_01_speed">vanspeed</string>
+<string name="12_83_02_speed">vanspeed</string>
+<string name="12_85_01_speed">vanspeed</string>
+<string name="13_83_01_speed">vanspeed</string>
+<string name="13_85_01_speed">vanspeed</string>
+<string name="14_82_01_speed">vanspeed</string>
+<string name="14_83_01_speed">vanspeed</string>
+<string name="14_83_02_speed">vanspeed</string>
+<string name="14_85_01_speed">vanspeed</string>
+<string name="15_19_01_speed">vanspeed</string>
+<string name="15_38_01_speed">truckspeed</string>
+<string name="16_19_01_speed">vanspeed</string>
+<string name="16_93_01_speed">carspeed</string>
+<string name="17_82_01_speed">carspeed</string>
+<string name="18_11_01_speed">vanspeed</string>
+<string name="18_26_01_speed">vanspeed</string>
+<string name="18_26_02_speed">vanspeed</string>
+<string name="18_28_01_speed">truckspeed</string>
+<string name="19_82_01_speed">carspeed</string>
+<string name="19_83_01_speed">vanspeed</string>
+<string name="19_81_01_speed">truckspeed</string>
+<string name="20_82_01_speed">carspeed</string>
+<string name="20_83_01_speed">vanspeed</string>
+<string name="20_83_02_speed">vanspeed</string>
+<string name="21_21_10_speed">vanspeed</string>
+<string name="21_22_51_speed">truckspeed</string>
+<string name="21_38_54_speed">truckspeed</string>
+
+<string name="30_25_01_speed">vanspeed</string>
+<string name="30_10_01_speed">carspeed</string>
+
+
+<string name="PP_10_01_speed">carspeed</string>
+<string name="PP_10_02_speed">carspeed</string>
+<string name="PP_10_03_speed">carspeed</string>
+<string name="PP_10_04_speed">carspeed</string>
+<string name="PP_40_01_speed">carspeed</string>
+<string name="PP_10_06_speed">carspeed</string>
+<string name="PP_10_07_speed">vanspeed</string>
+<string name="PP_10_08_speed">vanspeed</string>
+<string name="PP_10_11_speed">vanspeed</string>
+<string name="PP_10_12_speed">carspeed</string>
+<string name="PP_10_13_speed">carspeed</string>
+<string name="PP_10_09_speed">carspeed</string>
+<string name="PP_10_10_speed">carspeed</string>
+<string name="PP_20_01_speed">carspeed</string>
+<string name="PP_20_02_speed">carspeed</string>
+<string name="PP_20_03_speed">carspeed</string>
+<string name="KR_01_01_speed">vanspeed</string>
+<string name="BS_01_01_speed">vanspeed</string>
+<string name="DB_01_01_speed">carspeed</string>
+<string name="JA_01_01_speed">carspeed</string>
+<string name="PP_30_01_speed">truckspeed</string>
+<string name="PP_30_02_speed">carspeed</string>
+<string name="PP_30_03_speed">carspeed</string>
+<string name="PP_30_04_speed">truckspeed</string>
+<string name="PP_30_06_speed">truckspeed</string>
+<string name="PP_30_07_speed">carspeed</string>
+<string name="00_99_01_speed">truckspeed</string>
+
+<!--Vehicle->Number-->
+<string name="10_10_01_int">1</string>
+<string name="10_40_01_int">2</string>
+<string name="10_46_01_int">3</string>
+<string name="10_33_01_int">4</string>
+<string name="10_65_01_int">5</string>
+<string name="01_42_01_int">6</string>
+<string name="01_46_01_int">7</string>
+<string name="01_33_01_int">8</string>
+<string name="01_74_01_int">9</string>
+<string name="01_11_01_int">10</string>
+<string name="01_58_01_int">11</string>
+<string name="01_56_01_int">12</string>
+<string name="02_19_01_int">13</string>
+<string name="02_44_01_int">14</string>
+<string name="02_65_01_int">15</string>
+<string name="03_14_01_int">16</string>
+<string name="03_24_01_int">17</string>
+<string name="03_43_01_int">18</string>
+<string name="03_91_01_int">19</string>
+<string name="11_82_01_int">20</string>
+<string name="11_83_01_int">21</string>
+<string name="11_83_02_int">22</string>
+<string name="11_83_03_int">23</string>
+<string name="12_82_01_int">24</string>
+<string name="12_83_01_int">25</string>
+<string name="12_83_02_int">26</string>
+<string name="17_82_01_int">27</string>
+<string name="11_87_01_int">28</string>
+
+<string name="PP_10_01_int">29</string>
+<string name="PP_10_02_int">30</string>
+<string name="PP_10_03_int">31</string>
+<string name="PP_10_04_int">32</string>
+<string name="PP_20_01_int">33</string>
+<string name="PP_20_02_int">34</string>
+<string name="PP_10_09_int">35</string>
+<string name="PP_10_07_int">36</string>
+<string name="PP_10_08_int">37</string>
+<string name="PP_10_11_int">38</string>
+<string name="PP_10_12_int">39</string>
+<string name="PP_10_13_int">40</string>
+
+<string name="13_83_01_int">41</string>
+<string name="14_82_01_int">42</string>
+<string name="14_83_01_int">43</string>
+<string name="14_83_02_int">44</string>
+<string name="40_84_01_int">45</string>
+<string name="20_82_01_int">46</string>
+<string name="20_83_01_int">47</string>
+<string name="20_83_02_int">48</string>
+<string name="19_82_01_int">49</string>
+
+<string name="04_14_01_int">50</string>
+<string name="04_43_01_int">51</string>
+<string name="04_24_01_int">52</string>
+<string name="04_74_01_int">53</string>
+
+<string name="PP_40_01_int">54</string>
+<string name="05_19_01_int">55</string>
+<string name="05_42_01_int">56</string>
+<string name="06_47_01_int">57</string>
+<string name="19_81_01_int">58</string>
+<string name="19_83_01_int">59</string>
+
+<string name="40_20_01_int">60</string>
+<string name="40_84_02_int">61</string>
+<string name="40_84_03_int">62</string>
+<string name="40_84_04_int">63</string>
+<string name="14_85_01_int">64</string>
+
+<string name="11_85_01_int">65</string>
+<string name="12_85_01_int">66</string>
+<string name="13_85_01_int">67</string>
+
+<string name="18_11_01_int">68</string>
+<string name="18_26_01_int">69</string>
+<string name="18_26_02_int">70</string>
+<string name="18_28_01_int">71</string>
+<string name="16_19_01_int">72</string>
+<string name="16_93_01_int">73</string>
+<string name="15_38_01_int">74</string>
+<string name="15_19_01_int">75</string>
+<string name="01_19_01_int">76</string>
+
+<string name="21_21_10_int">77</string>
+<string name="21_22_51_int">78</string>
+<string name="21_38_54_int">79</string>
+
+<string name="BS_01_01_int">80</string>
+
+<string name="PP_30_01_int">81</string>
+<string name="PP_30_04_int">82</string>
+
+<string name="KR_01_01_int">83</string>
+
+<string name="30_25_01_int">84</string>
+<string name="30_10_01_int">85</string>
+
+<!--Number->Vehicle-->
+<string name="1_int">10_10_01</string>
+<string name="2_int">10_40_01</string>
+<string name="3_int">10_46_01</string>
+<string name="4_int">10_33_01</string>
+<string name="5_int">10_65_01</string>
+<string name="6_int">01_42_01</string>
+<string name="7_int">01_46_01</string>
+<string name="8_int">01_33_01</string>
+<string name="9_int">01_74_01</string>
+<string name="10_int">01_11_01</string>
+<string name="11_int">01_58_01</string>
+<string name="12_int">01_56_01</string>
+<string name="13_int">02_19_01</string>
+<string name="14_int">02_44_01</string>
+<string name="15_int">02_65_01</string>
+<string name="16_int">03_14_01</string>
+<string name="17_int">03_24_01</string>
+<string name="18_int">03_43_01</string>
+<string name="19_int">03_91_01</string>
+<string name="20_int">11_82_01</string>
+<string name="21_int">11_83_01</string>
+<string name="22_int">11_83_02</string>
+<string name="23_int">11_83_03</string>
+<string name="24_int">12_82_01</string>
+<string name="25_int">12_83_01</string>
+<string name="26_int">12_83_02</string>
+<string name="27_int">17_82_01</string>
+<string name="28_int">11_87_01</string>
+
+<string name="29_int">PP_10_01</string>
+<string name="30_int">PP_10_02</string>
+<string name="31_int">PP_10_03</string>
+<string name="32_int">PP_10_04</string>
+<string name="33_int">PP_20_01</string>
+<string name="34_int">PP_20_02</string>
+<string name="35_int">PP_10_09</string>
+<string name="36_int">PP_10_07</string>
+<string name="37_int">PP_10_08</string>
+<string name="38_int">PP_10_11</string>
+<string name="39_int">PP_10_12</string>
+<string name="40_int">PP_10_13</string>
+
+<string name="41_int">13_83_01</string>
+<string name="42_int">14_82_01</string>
+<string name="43_int">14_83_01</string>
+<string name="44_int">14_83_02</string>
+<string name="45_int">40_84_01</string>
+<string name="46_int">20_82_01</string>
+<string name="47_int">20_83_01</string>
+<string name="48_int">20_83_02</string>
+<string name="49_int">19_82_01</string>
+
+<string name="50_int">04_14_01</string>
+<string name="51_int">04_43_01</string>
+<string name="52_int">04_24_01</string>
+<string name="53_int">04_74_01</string>
+
+<string name="54_int">PP_40_01</string>
+<string name="55_int">05_19_01</string>
+<string name="56_int">05_42_01</string>
+<string name="57_int">06_47_01</string>
+<string name="58_int">19_81_01</string>
+<string name="59_int">19_83_01</string>
+
+<string name="60_int">40_20_01</string>
+<string name="61_int">40_84_02</string>
+<string name="62_int">40_84_03</string>
+<string name="63_int">40_84_04</string>
+<string name="64_int">14_85_01</string>
+
+<string name="65_int">11_85_01</string>
+<string name="66_int">12_85_01</string>
+<string name="67_int">13_85_01</string>
+
+<string name="68_int">18_11_01</string>
+<string name="69_int">18_26_01</string>
+<string name="70_int">18_26_02</string>
+<string name="71_int">18_28_01</string>
+<string name="72_int">16_19_01</string>
+<string name="73_int">16_93_01</string>
+<string name="74_int">15_38_01</string>
+<string name="75_int">15_19_01</string>
+<string name="76_int">01_19_01</string>
+
+<string name="77_int">21_21_10</string>
+<string name="78_int">21_22_51</string>
+<string name="79_int">21_38_54</string>
+
+<string name="80_int">BS_01_01</string>
+
+<string name="81_int">PP_30_01</string>
+<string name="82_int">PP_30_04</string>
+
+<string name="83_int">KR_01_01</string>
+
+<string name="84_int">30_25_01</string>
+<string name="85_int">30_10_01</string>
+
+
+<!-- Namen -->
+<string name="10_10_01">Florian Fuchsburg 10</string>
+<string name="10_33_01">Florian Fuchsburg 10/33</string>
+<string name="10_46_01">Florian Fuchsburg 10/46</string>
+<string name="10_40_01">Florian Fuchsburg 10/40</string>
+<string name="10_65_01">Florian Fuchsburg 10/65</string>
+
+<string name="01_11_01">Florian Fuchsburg 1/11</string>
+<string name="01_33_01">Florian Fuchsburg 1/33</string>
+<string name="01_46_01">Florian Fuchsburg 1/46</string>
+<string name="01_58_01">Florian Fuchsburg 1/58</string>
+<string name="01_74_01">Florian Fuchsburg 1/74</string>
+<string name="01_42_01">Florian Fuchsburg 1/42</string>
+<string name="01_19_01">Florian Fuchsburg 1/19</string>
+<string name="01_79_01">Florian Fuchsburg 1/79</string>
+<string name="01_56_01">Florian Fuchsburg 1/56</string>
+
+<string name="02_65_01">Florian Fuchsburg 2/65</string>
+<string name="02_44_01">Florian Fuchsburg 2/44</string>
+<string name="02_19_01">Florian Fuchsburg 2/19</string>
+
+<string name="03_24_01">Florian Fuchsburg 3/24</string>
+<string name="03_43_01">Florian Fuchsburg 3/43</string>
+<string name="03_14_01">Florian Fuchsburg 3/14</string>
+<string name="03_91_01">Florian Fuchsburg 3/93</string>
+
+<string name="04_14_01">Florian Fuchsburg 4/14</string>
+<string name="04_24_01">Florian Fuchsburg 4/24</string>
+<string name="04_43_01">Florian Fuchsburg 4/43</string>
+<string name="04_74_01">Florian Fuchsburg 4/74</string>
+
+<string name="05_42_01">Florian Fuchsburg 5/42</string>
+<string name="05_19_01">Florian Fuchsburg 5/19</string>
+
+<string name="06_47_01">Florian Fuchsburg 6/47</string>
+
+<string name="AB_MANV">Florian Fuchsburg AB-MANV</string>
+<string name="AB_AS">Florian Fuchsburg AB-Respiratory protection</string>
+<string name="AB_MULDE">Florian Fuchsburg AB-Trough</string>
+<string name="AB_DEKON">Florian Fuchsburg AB-DEKON</string>
+<string name="AB_RUEST">Florian Fuchsburg AB-RESCUE</string>
+<string name="AB_WASSER">Florian Fuchsburg AB-WATER</string>
+
+<string name="21_21_10">Heros Fuchsburg 21/10</string>
+<string name="21_22_51">Heros Fuchsburg 22/51</string>
+<string name="21_38_54">Heros Fuchsburg 38/54</string>
+
+<string name="11_82_01">Red Cross Fuchsburg 1/82</string>
+<string name="11_83_01">Red Cross Fuchsburg 1/83-1</string>
+<string name="11_83_02">Red Cross Fuchsburg 1/83-2</string>
+<string name="11_83_03">Red Cross Fuchsburg 1/83-3</string>
+<string name="11_85_01">Red Cross Fuchsburg 1/85</string>
+<string name="11_87_01">Red Cross Fuchsburg 7/87</string>
+
+<string name="12_82_01">Samaritan Fuchsburg 2/82</string>
+<string name="12_83_01">Samaritan Fuchsburg 2/83-1</string>
+<string name="12_83_02">Samaritan Fuchsburg 2/83-2</string>
+<string name="12_85_01">Samaritan Fuchsburg 2/85</string>
+
+<string name="13_83_01">Acre Fuchsburg 3/83</string>
+<string name="13_85_01">Acre Fuchsburg 3/85</string>
+
+<string name="14_82_01">Johannes Fuchsburg 4/82</string>
+<string name="14_83_01">Johannes Fuchsburg 4/83-1</string>
+<string name="14_83_02">Johannes Fuchsburg 4/83-2</string>
+<string name="14_85_01">Johannes Fuchsburg 4/85</string>
+
+<string name="15_19_01">Johannes Fuchsburg 5/19</string>
+<string name="15_38_01">Johannes Fuchsburg 5/38</string>
+
+<string name="16_19_01">Pelican Fuchsburg 6/19</string>
+<string name="16_93_01">Pelican Fuchsburg 6/93</string>
+
+<string name="17_82_01">Rotkreuz Fuchsburg 7/82</string>
+
+<string name="18_11_01">Red Cross Fuchsburg 8/11</string>
+<string name="18_26_01">Red Cross Fuchsburg 8/26-1</string>
+<string name="18_26_02">Red Cross Fuchsburg 8/26-2</string>
+<string name="18_28_01">Red Cross Fuchsburg 8/28</string>
+
+<string name="19_82_01">Rescue Fuchsburg 9/82</string>
+<string name="19_83_01">Rescue Fuchsburg 9/83</string>
+<string name="19_81_01">Rescue Fuchsburg 9/81</string>
+
+<string name="20_82_01">Red 82</string>
+<string name="20_83_01">Red 83</string>
+<string name="20_83_02">Red 84</string>
+
+<string name="30_25_01">Red 25</string>
+<string name="30_10_01">Red 10</string>
+
+<string name="40_84_01">Christoph 84</string>
+<string name="40_84_02">Rega 20</string>
+<string name="40_84_03">SAR 12</string>
+<string name="40_84_04">Christoph 82</string>
+
+<string name="KR_01_01">Explosive Ordnance Disposal Service</string>
+<string name="BS_01_01">Municipal Utilities Fuchsburg</string>
+
+<string name="PP_10_01">Fuchs 180</string>
+<string name="PP_10_02">Fuchs 181</string>
+<string name="PP_10_03">Fuchs 182</string>
+<string name="PP_10_04">Fuchs 183</string>
+
+<string name="PP_10_07">Fuchs 170</string>
+<string name="PP_10_08">Fuchs 171</string>
+<string name="PP_10_09">R�uber 160</string>
+<string name="PP_10_11">Fuchs 168</string>
+<string name="PP_10_12">Skandal 155</string>
+<string name="PP_10_13">Skandal 156</string>
+
+<string name="PP_40_01">Fuchs 280</string>
+
+<string name="PP_20_01">Lahntal 80</string>
+<string name="PP_20_02">Lahntal 50</string>
+
+<string name="40_20_01">Air 34</string>
+
+<string name="PP_30_01">Justiz 42</string>
+<string name="PP_30_04">BW 1</string>
+
+<string name="JA_01_01">Jaeger</string>
+<string name="DB_01_01">DB Emergency Manager</string>
+
+
+
+<!-- Alarmierung -->
+<string name="FF011">mod:Prototypes/Vehicles/__ Feuerwehr/KODW_10_1.e4p</string>
+<string name="FF012">mod:Prototypes/Vehicles/__ Feuerwehr/HLF20_01_2.e4p</string>
+<string name="FF013">mod:Prototypes/Vehicles/__ Feuerwehr/MLF_10_1.e4p</string>
+<string name="FF014">mod:Prototypes/Vehicles/__ Feuerwehr/DLK_10_1_logic.e4p</string>
+<string name="FF015">mod:Prototypes/Vehicles/__ Feuerwehr/WLF_10_1.e4p</string>
+<!--<string name="FF016">mod:Prototypes/Vehicles/__ Feuerwehr/AB_AS_01.e4p</string>-->
+
+<string name="FF017">mod:Prototypes/Vehicles/__ Feuerwehr/ELW_01_1F.e4p</string>
+<string name="FF018">mod:Prototypes/Vehicles/__ Feuerwehr/HLF20_01_1.e4p</string>
+<string name="FF019">mod:Prototypes/Vehicles/__ Feuerwehr/DLK_01_1F_logic.e4p</string>
+<string name="FF0110">mod:Prototypes/Vehicles/__ Feuerwehr/LF10_01_1.e4p</string>
+<string name="FF0111">mod:Prototypes/Vehicles/__ Feuerwehr/GWL_01_1.e4p</string>
+<string name="FF0112">mod:Prototypes/Vehicles/__ Feuerwehr/GWW_01_1.e4p</string>
+<string name="FF0113">mod:Prototypes/Vehicles/__ Feuerwehr/GWU_01_1.e4p</string>
+<string name="FF0114">mod:Prototypes/Vehicles/__ Feuerwehr/MTW_01_1.e4p</string>
+<string name="FF0115">mod:Prototypes/Vehicles/__ Feuerwehr/ANH_1_79_1.e4p</string>
+
+<string name="FF0116">mod:Prototypes/Vehicles/__ Feuerwehr/MTW_02_1.e4p</string>
+<string name="FF0117">mod:Prototypes/Vehicles/__ Feuerwehr/LF1612_02_1.e4p</string>
+<string name="FF0118">mod:Prototypes/Vehicles/__ Feuerwehr/WLF_02_1F.e4p</string>
+<string name="FF0119">mod:Prototypes/Vehicles/__ Feuerwehr/AB_MU_01.e4p</string>
+<string name="FF0120">mod:Prototypes/Vehicles/__ Feuerwehr/AB_W_01.e4p</string>
+
+<string name="FF0121">mod:Prototypes/Vehicles/__ Feuerwehr/HLF10_03_1.e4p</string>
+<string name="FF0122">mod:Prototypes/Vehicles/__ Feuerwehr/TLF40_03_1.e4p</string>
+<string name="FF0123">mod:Prototypes/Vehicles/__ Feuerwehr/MZF_03_1.e4p</string>
+<string name="FF0124">mod:Prototypes/Vehicles/__ Feuerwehr/ABC_02_1.e4p</string>
+
+<string name="FF0125">mod:Prototypes/Vehicles/__ Feuerwehr/HLF10_04_1.e4p</string>
+<string name="FF0126">mod:Prototypes/Vehicles/__ Feuerwehr/TLF40_04_1.e4p</string>
+<string name="FF0127">mod:Prototypes/Vehicles/__ Feuerwehr/GWL_04_1.e4p</string>
+<string name="FF0128">mod:Prototypes/Vehicles/__ Feuerwehr/MZF_04_1.e4p</string>
+
+<string name="FF0129">mod:Prototypes/Vehicles/__ Feuerwehr/MZF_05_1.e4p</string>
+<string name="FF0130">mod:Prototypes/Vehicles/__ Feuerwehr/LF_86_1.e4p</string>
+
+<string name="FF016">mod:Prototypes/Vehicles/__ Feuerwehr/TSF_06_1.e4p</string>
+
+<string name="FF0131">mod:Prototypes/Vehicles/__ Feuerwehr/GKW_01_1.e4p</string>
+<string name="FF0132">mod:Prototypes/Vehicles/__ Feuerwehr/MzKW_01_1.e4p</string>
+<string name="FF0133">mod:Prototypes/Vehicles/__ Feuerwehr/THW_01_1.e4p</string>
+<string name="FF0134">mod:Prototypes/Vehicles/__ Flughafen Feuerwehr/ROT_FLF_1.e4p</string>
+<string name="FF0135">mod:Prototypes/Vehicles/__ Flughafen Feuerwehr/ROT_10_1.e4p</string>
+
+<string name="RD011">mod:Prototypes/Vehicles/__RD_LANDKREIS/RTW_DRK_2.e4p</string>
+<string name="RD012">mod:Prototypes/Vehicles/__RD_LANDKREIS/RTW_DRK_3.e4p</string>
+<string name="RD013">mod:Prototypes/Vehicles/__RD_LANDKREIS/NEF_DRK_1.e4p</string>
+<string name="RD014">mod:Prototypes/Vehicles/__RD_LANDKREIS/RTW_DRK_1.e4p</string>
+<string name="RD015">mod:Prototypes/Vehicles/__RD_LANDKREIS/SRTW_DRK_1.e4p</string>
+<string name="RD016">mod:Prototypes/Vehicles/__RD_LANDKREIS/NEF_DRK_2.e4p</string>
+<string name="RD017">mod:Prototypes/Vehicles/__RD_LANDKREIS/ELW_DRK_1.e4p</string>
+<string name="RD018">mod:Prototypes/Vehicles/__RD_LANDKREIS/NKTW_DRK_1.e4p</string>
+<string name="RD019">mod:Prototypes/Vehicles/__RD_LANDKREIS/NKTW_DRK_2.e4p</string>
+<string name="RD0110">mod:Prototypes/Vehicles/__RD_LANDKREIS/GWSAN_DRK_1.e4p</string>
+<string name="RD0111">mod:Prototypes/Vehicles/__RD_LANDKREIS/KTW_DRK_1.e4p</string>
+
+<string name="RD0112">mod:Prototypes/Vehicles/__RD_LANDKREIS/NEF_ASB_1.e4p</string>
+<string name="RD0113">mod:Prototypes/Vehicles/__RD_LANDKREIS/RTW_ASB_1_.e4p</string>
+<string name="RD0114">mod:Prototypes/Vehicles/__RD_LANDKREIS/RTW_ASB_3_.e4p</string>
+<string name="RD0115">mod:Prototypes/Vehicles/__RD_LANDKREIS/KTW_ASB_1.e4p</string>
+
+<string name="RD0116">mod:Prototypes/Vehicles/__RD_LANDKREIS/RTW_JOH_1.e4p</string>
+<string name="RD0117">mod:Prototypes/Vehicles/__RD_LANDKREIS/KTW_JOH_1.e4p</string>
+
+<string name="RD0118">mod:Prototypes/Vehicles/__RD_LANDKREIS/NEF_MAL_1.e4p</string>
+<string name="RD0119">mod:Prototypes/Vehicles/__RD_LANDKREIS/RTW_MAL_1.e4p</string>
+<string name="RD0120">mod:Prototypes/Vehicles/__RD_LANDKREIS/RTW_MAL_2.e4p</string>
+<string name="RD0121">mod:Prototypes/Vehicles/__RD_LANDKREIS/KTW_MAL_1.e4p</string>
+<string name="RD0122">mod:Prototypes/Vehicles/__RD_LANDKREIS/GWBT_MAL_1.e4p</string>
+<string name="RD0123">mod:Prototypes/Vehicles/__RD_LANDKREIS/MTW_MAL_1.e4p</string>
+
+<string name="RD0124">mod:Prototypes/Vehicles/__RD_LANDKREIS/MTW_DLRG_1.e4p</string>
+<string name="RD0125">mod:Prototypes/Vehicles/__RD_LANDKREIS/BGF_DLRG_1.e4p</string> 
+
+<string name="RD0126">mod:Prototypes/Vehicles/__RD_LANDKREIS/LNA_BUW_1.e4p</string>
+<string name="RD0127">mod:Prototypes/Vehicles/__RD_LANDKREIS/ITW_BW_1.e4p</string>
+<string name="RD0128">mod:Prototypes/Vehicles/__RD_LANDKREIS/RTW_BW_1.e4p</string>
+
+<string name="RD0129">mod:Prototypes/Vehicles/__RD_LANDKREIS/NEF_AIR_1.e4p</string>
+<string name="RD0130">mod:Prototypes/Vehicles/__RD_LANDKREIS/RTW_AIR_2.e4p</string>
+<string name="RD0131">mod:Prototypes/Vehicles/__RD_LANDKREIS/RTW_AIR_1.e4p</string>
+
+<string name="RD0132">mod:Prototypes/Vehicles/__RD_LANDKREIS/REGA_RTH.e4p</string>
+<string name="RD0133">mod:Prototypes/Vehicles/__RD_LANDKREIS/DRF_RTH.e4p</string>
+<string name="RD0134">mod:Prototypes/Vehicles/__RD_LANDKREIS/BMI_RTH.e4p</string>
+<string name="RD0135">mod:Prototypes/Vehicles/__RD_LANDKREIS/BW_SAR.e4p</string>
+
+<string name="POL011">mod:Prototypes/Vehicles/__ Polizei/FSTW_01_1.e4p</string>
+<string name="POL012">mod:Prototypes/Vehicles/__ Polizei/FSTW_02_1.e4p</string>
+<string name="POL013">mod:Prototypes/Vehicles/__ Polizei/FSTW_03_1.e4p</string>
+<string name="POL014">mod:Prototypes/Vehicles/__ Polizei/FSTW_04_1.e4p</string>
+<string name="POL015">mod:Prototypes/Vehicles/__ Polizei/HGrKW_01_1.e4p</string>
+<string name="POL016">mod:Prototypes/Vehicles/__ Polizei/HGrKW_01_2.e4p</string>
+<string name="POL017">mod:Prototypes/Vehicles/__ Polizei/FSTW_09_1.e4p</string>
+<string name="POL018">mod:Prototypes/Vehicles/__ Polizei/GefKW_01_1.e4p</string>
+<string name="POL019">mod:Prototypes/Vehicles/__ Polizei/MEK_01_1.e4p</string>
+<string name="POL0110">mod:Prototypes/Vehicles/__ Polizei/MEK_02_1.e4p</string>
+
+<string name="POL0111">mod:Prototypes/Vehicles/__ Polizei/FSTW_05_1.e4p</string>
+
+<string name="POL0112">mod:Prototypes/Vehicles/__ Polizei/FSTW_24_1.e4p</string>
+<string name="POL0113">mod:Prototypes/Vehicles/__ Polizei/BPOL_T5_1.e4p</string>
+
+<string name="POL0114">mod:Prototypes/Vehicles/__ Polizei/MTW_06_1.e4p</string>
+<string name="POL0115">mod:Prototypes/Vehicles/__ Polizei/WaW_01_1.e4p</string>
+
+<string name="POL0116">mod:Prototypes/Vehicles/__ Polizei/KRD_01_1.e4p</string>
+<string name="POL0117">mod:Prototypes/Vehicles/__ Polizei/ESD_01_1.e4p</string>
+
+<string name="POL0118">mod:Prototypes/Vehicles/__ Polizei/HELI_BPOL.e4p</string>
+
+
+<!-- Walking fare boards -->
+<string name="FHHM_GG1">Danger number: 33 -- Highly flammable liquid substance -- Flash point below 23 degrees -- Cool vehicle, keep ignition sources and possible sparks devices away. -- Approch only with SCBA!</string>
+<string name="FHHM_GG2">Hazard number: X423 -- Flammable solid that combusts on contact with water. -- Do not attempt to extinguish with water or foam! -- Close off the area!</string>
+<string name="FHHM_GG3">Danger number: 336 -- Flammable gas substance -- Toxic if inhaled -- Explosive! -- Extinguish with foam. -- Evacuate the area quickly! -- Approch only with SCBA!</string>
+<string name="FHHM_GG4">Danger class: 1.1D -- Solid explosive substance -- Danger of explosion! -- Evacuate the area immediately! -- Cool with foam! -- Keep ignition sources away! -- Avoid vibration! -- Call in explosive ordnance disposal service!</string>
+<string name="FHHM_GG5">Hazard number: 86 -- Corrosive, toxic substance. -- Close off the area! -- Dilute with Water or Foam. -- Approch only with CSA Type 2 or above!</string>
+<string name="FHHM_GG6">Hazard number: 77 -- Radioactive substance -- Hazard class unknown. -- Radiation measurement shows medium radiation -- Evacuate a Large Area! -- Stay in the danger area as little as possible! -- Approch only with CSA type 3!</string>
+</strings>
